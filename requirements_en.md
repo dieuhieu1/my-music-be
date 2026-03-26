@@ -3,7 +3,7 @@
 
 > A self-hosted, ad-free Spotify alternative for small communities (20–200 users).
 
-**v3.0 adds:** Offline Downloads (BL-52–58) · Artist Live Drops (BL-59–65)
+**v3.0 adds:** Artist Live Drops (BL-59–65)
 
 ---
 
@@ -27,7 +27,7 @@ This document is the single source of truth for all business logic, roles, featu
 |---|---|
 | Backend | NestJS / TypeORM |
 | Auth | JWT (access + refresh tokens), bcrypt (rounds = 10) |
-| Payments | VNPay |
+| Payments | VNPay, MoMo |
 | Scheduled tasks | Cron jobs (including per-minute for drop firing) |
 | Storage | File server with encrypted `.enc` variants for downloadable songs |
 | AI | Rules-based engine now; ML integration path kept open |
@@ -43,7 +43,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | USER | Listeners, playlist curators | Stream, like, follow, create playlists. Cannot upload. |
 | ARTIST | Music creators — self-register at signup | Everything USER can do + upload songs, manage own albums, analytics, public profile, schedule drops. |
 | ADMIN | Platform administrator | Everything ARTIST can do + approve/reject content, manage genres, audit log, all sessions. |
-| PREMIUM (tier) | Paid upgrade — stacks on USER or ARTIST | 320 kbps audio, offline downloads (100 songs), higher upload limits. Unlocked via VNPay. |
+| PREMIUM (tier) | Paid upgrade — stacks on USER or ARTIST | 320 kbps audio, offline downloads (100 songs), higher upload limits. Unlocked via VNPay or MoMo (automatic), or manually granted by Admin. |
 
 ### 2.1 Permission Matrix
 
@@ -88,9 +88,23 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-01 | User registration | `POST /auth/register` with `role=USER` (default). Fields: `name`, `email`, `password`, `confirmPassword`. Validate email uniqueness, password match, hash with bcrypt (rounds=10), assign USER role, save user, generate access + refresh tokens, send welcome email async. Return `TokenResponse`. |
-| BL-46 | Artist registration | `POST /auth/register` with `role=ARTIST`. All BL-01 fields plus: `stageName` (required), `bio` (required), `genres[]` (required, min 1), `socialLinks[]` (optional). Validate all artist fields before creating any records. On success: create User (role=ARTIST) + ArtistProfile atomically. Account is active immediately. |
+| BL-01 | User registration | `POST /auth/register` with `role=USER` (default). Fields: `name`, `email`, `password`, `confirmPassword`. Validate email uniqueness, password match, hash with bcrypt (rounds=10), assign USER role, save user with `is_email_verified=false`, generate access + refresh tokens. Send email verification code (6-digit, 10 min expiry) async using the `verification_codes` table. **Unverified users can log in but cannot stream, like, create playlists, or access premium features until email is verified (BL-78).** Return `TokenResponse`. |
+| BL-46 | Artist registration | `POST /auth/register` with `role=ARTIST`. All BL-01 fields plus: `stageName` (required), `bio` (required), `genres[]` (required, min 1), `socialLinks[]` (optional). Validate all artist fields before creating any records. On success: create User (role=ARTIST) + ArtistProfile atomically with `is_email_verified=false`. Send email verification code same as BL-01. Unverified artists cannot upload songs. Return `TokenResponse`. |
 | BL-47 | Artist profile record | `ArtistProfile` created atomically with User during artist registration. Fields: `userId` (FK, unique), `stageName`, `bio`, `followerCount=0`, `socialLinks[]`, `suggestedGenres[]`. Public immediately via `GET /artists/:id/profile` showing stageName, bio, followerCount, and LIVE songs only. |
+
+### Email Verification
+
+| Code | Name | Description |
+|---|---|---|
+| BL-78 | Verify email | `POST /auth/verify-email`. Body: `{ email, code }`. Find `VerificationCode` by email + code. Check not expired. Set `is_email_verified=true` on user. Delete the `VerificationCode` record. Return `UserResponse`. |
+| BL-79 | Resend verification email | `POST /auth/resend-verification-email`. Authenticated. If `is_email_verified=true`, return error. Generate new 6-digit code, save to `verification_codes` (invalidate previous ones for same email), send verification email. Return `VerificationCodeResponse`. |
+
+### Profile Management
+
+| Code | Name | Description |
+|---|---|---|
+| BL-66 | Update user profile | `PATCH /users/me`. Authenticated user only. Updatable fields: `name`, `avatarUrl`. Validate name is non-empty. Return `UserResponse`. |
+| BL-67 | Update artist profile | `PATCH /artists/me/profile`. ARTIST role only. Updatable fields: `stageName`, `bio`, `avatarUrl`, `socialLinks[]`. Validate stageName is non-empty if provided. Return `ArtistProfileResponse`. |
 
 ### Login & Session
 
@@ -114,7 +128,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | Code | Name | Description |
 |---|---|---|
 | BL-41 | Rate limiting | Auth endpoints: max 10 req/min per IP. Upload endpoints: max 5 req/min. General API: max 200 req/min. Return 429 with `Retry-After` header on breach. |
-| BL-42 | Device session management | Each login creates a Session record (`deviceName`, `deviceType`, IP, `lastSeenAt`, `refreshTokenId`). Users can view and revoke sessions. Auto-expire sessions inactive for 30 days. |
+| BL-42 | Device session management | Each login creates a Session record (`deviceName`, `deviceType`, IP, `lastSeenAt`, `refreshTokenId`). Sessions have a TTL of **30 days from last activity**. On session creation, enqueue a cleanup job at the TTL expiry time — the job hard-deletes the session and its associated refresh token when the TTL hits. BL-45 cron remains as a safety-net sweep. Users can view active sessions via `GET /auth/sessions` and manually revoke any session via `DELETE /auth/sessions/:id` (soft-delete then hard-delete on next cleanup). |
 | BL-43 | Brute force protection | After 5 consecutive failed logins, lock account for 15 minutes. Store `failedAttempts` + `lockUntil` on user. Reset counter on success. Notify user via email on lock. |
 
 ---
@@ -129,15 +143,16 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | APPROVED | Admin approved. No drop date set — becomes LIVE immediately. |
 | SCHEDULED | Admin approved with a future `dropAt`. Teaser page visible. Audio locked (returns 423). |
 | LIVE | Publicly streamable. Appears in browse, search, artist profile, and follower feeds. |
-| REJECTED | Admin rejected with a reason string. Artist notified via email. |
-| TAKEN DOWN | Previously LIVE song removed by admin following a content report. |
+| REJECTED | Admin permanently rejected with a reason string. Artist notified via email. Cannot be resubmitted. |
+| REUPLOAD_REQUIRED | Admin flagged the song as needing changes (e.g. inappropriate content). Artist notified with reason notes. Artist can edit and resubmit → status returns to `PENDING` (BL-85). |
+| TAKEN_DOWN | Previously LIVE song removed by admin following a content report. Can be restored to LIVE by admin (BL-83). |
 
 ### 4.2 Upload & Approval Workflow
 
 | Code | Name | Description |
 |---|---|---|
 | BL-48 | Upload restriction | `POST /songs/upload` checks `user.role IN [ARTIST, ADMIN]`. If USER role, throw FORBIDDEN. All uploads regardless of role enter `status=PENDING`. Admin uploads also go through PENDING to maintain audit trail. |
-| BL-37 | Song approval workflow | Admin approves (`status=APPROVED` or `SCHEDULED` if `dropAt` set) or rejects (`status=REJECTED`) with a required reason string. Only LIVE songs appear in browse/search. Notify uploader via email. Log to AuditLog (BL-40). |
+| BL-37 | Song approval workflow | Admin reviews a PENDING song. Actions: **Approve** → `status=APPROVED` (or `SCHEDULED` if `dropAt` set); **Reject** → `status=REJECTED` with required reason (permanent); **Request reupload** → `status=REUPLOAD_REQUIRED` with required notes (BL-84). Only LIVE songs appear in browse/search. Notify uploader via **in-app notification and email** for all outcomes (approved, rejected, reupload required). Log to AuditLog (BL-40). |
 | BL-44 | File validation on upload | Validate MIME type via magic bytes, enforce max duration (20 min), strip embedded metadata. Reject silently renamed files. Server also generates an AES-256 encrypted `.enc` variant for offline download use. |
 | BL-39 | Upload limits | Non-premium ARTIST: max 50 songs, max 50 MB/file. PREMIUM ARTIST: max 200 songs, max 200 MB/file. ADMIN: no limit. Return `UPLOAD_LIMIT_EXCEEDED` with current usage stats on breach. |
 | BL-49 | Genre suggestion on upload | Artist may include `suggestedGenres[]` not in the confirmed list. Each creates a `GenreSuggestion` record (name, suggestedBy, songId, status=PENDING). Admin reviews in the same queue as song uploads. On approval: add to confirmed list and tag the song. |
@@ -162,7 +177,15 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | BL-18 | Album deletion cascade | On delete album: delete ALL songs in that album (triggers BL-16 for each). |
 | BL-19 | Artist deletion cascade | On delete: remove artist from all songs' and albums' artist lists. Do NOT delete the songs or albums themselves. |
 
-### 4.5 Playlists & Ownership
+### 4.5 Song Status Transitions (Admin Actions)
+
+| Code | Name | Description |
+|---|---|---|
+| BL-83 | Restore taken-down song | `PATCH /admin/songs/:id/restore`. ADMIN only. Song must be in `TAKEN_DOWN` status. Set `status=LIVE`. Log to AuditLog (BL-40). Send **in-app notification and email** to the uploader (14.7). Return `SongResponse`. |
+| BL-84 | Request reupload | `PATCH /admin/songs/:id/reupload-required`. ADMIN only. Song must be in `PENDING` status. Set `status=REUPLOAD_REQUIRED`, save `reupload_reason` (required notes — e.g. "audio contains explicit content at 1:34"). Notify uploader via email (14.6) and in-app notification. Log to AuditLog (BL-40). Return `SongResponse`. |
+| BL-85 | Resubmit song | `PATCH /songs/:id/resubmit`. ARTIST or ADMIN role, own song only. Song must be in `REUPLOAD_REQUIRED` status. Artist may update `title`, `coverArtUrl`, `genreIds`, and replace the audio file. Set `status=PENDING`. Log to AuditLog. Return `SongResponse`. |
+
+### 4.6 Playlists & Ownership
 
 | Code | Name | Description |
 |---|---|---|
@@ -170,7 +193,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | BL-22 | Playlist creator assignment | On create: set `creator` = current user from JWT. Creator cannot be changed after creation. |
 | BL-50 | Ownership guard | All mutating endpoints on songs and albums: if `user.role == ARTIST`, verify `resource.creatorId == currentUser.id`, throw FORBIDDEN if not. Admins bypass. USERs blocked at route level. |
 
-### 4.6 Moderation & Reporting
+### 4.7 Moderation & Reporting
 
 | Code | Name | Description |
 |---|---|---|
@@ -186,7 +209,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | BL-28 | Audio quality tiers | Standard 128 kbps for non-premium. High 320 kbps for PREMIUM users. Downgrade on next track request if premium expires mid-session. |
 | BL-29 | Playback history | Record `PlaybackHistory` entry (`userId`, `songId`, `playedAt`, `skipped: boolean`) when user plays past 30 seconds. Plays < 10 seconds recorded as `skipped=true`. Cap at 200 entries per user. |
 | BL-30 | Resume playback | Store last `positionSeconds` per user per song in `PlaybackState` table. On app load, return last played song + position for 'Continue listening' prompt. |
-| BL-31 | Queue management | Transient server-side play queue per user, cleared on logout. Endpoints: add, remove, reorder, clear. Supports shuffle mode. |
+| BL-31 | Queue management | Server-side play queue per user. Endpoints: add, remove, reorder, clear. Supports shuffle mode. On logout: **hard-delete** all queue rows for that user (not soft delete — queue is gone permanently). On next login, queue starts empty; a new queue is created automatically when the user begins playing a song. |
 | BL-51 | Artist analytics | `GET /artist/me/analytics` — ARTIST role only. Returns per-song play counts, like counts, follower count, top 5 songs by plays in last 30 days. Admins access any artist via `GET /admin/artists/:id/analytics`. |
 
 ---
@@ -195,10 +218,19 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-32 | Following system | Users can follow other users and artists (many-to-many `user_follows`). Following an artist surfaces their public playlists and drop announcements in the feed. Return follower/following counts on responses. |
+| BL-32 | Follow user / artist | `POST /users/:id/follow`. Authenticated user follows another user or artist. Create `user_follows` record. Increment followee's `followerCount`. Following an artist surfaces their public playlists and drop announcements in the feed. Return `FollowStatsResponse`. |
+| BL-72 | Unfollow user / artist | `DELETE /users/:id/follow`. Authenticated user unfollows. Soft-delete the `user_follows` record. Decrement followee's `followerCount`. Return `FollowStatsResponse`. |
+| BL-73 | Follower / following lists | `GET /users/:id/followers` — paginated list of users who follow user `:id`. `GET /users/:id/following` — paginated list of users/artists that user `:id` follows. Both public. Return `PaginatedData<UserResponse>`. |
 | BL-33 | Activity feed | Generate feed from followed users and artists. Events: new playlist, song liked, artist followed, `NEW_RELEASE` (drop fired), `UPCOMING_DROP` (notification). Store as `FeedEvent` (`actorId`, `eventType`, `targetId`, `createdAt`). Return paginated, newest first. |
-| BL-34 | Song likes | Users can like/unlike songs. `LikedSongs` is a special auto-created playlist per user. Return `isLiked: boolean` on `SongResponse`. |
-| BL-36 | Genre system | Songs and playlists have genres (many-to-many). Confirmed genres are admin-managed. Artists suggest new genres during upload (BL-49). Feeds AI recommendation engine. |
+| BL-34 | Song likes | Users can like/unlike songs. `LikedSongs` is a special playlist per user — **created atomically on the user's first like**, not at registration. If the playlist does not exist when a like is recorded, create it first then add the song. Return `isLiked: boolean` on `SongResponse`. |
+| BL-36 | Genre system | Songs and playlists have genres (many-to-many). Confirmed genres are admin-managed (CRUD via BL-68–71). Artists suggest new genres during upload (BL-49). Feeds AI recommendation engine. |
+| BL-80 | List notifications | `GET /notifications` (authenticated, paginated). Returns the current user's in-app notifications ordered by `created_at DESC`. Each item includes: `id`, `type`, `title`, `body`, `isRead`, `targetId`, `targetType`, `createdAt`. |
+| BL-81 | Mark notification read | `PATCH /notifications/:id/read`. Authenticated. Sets `is_read=true` and `read_at=now` on the notification. User can only mark their own notifications. Return updated notification. |
+| BL-82 | Unread notification count | `GET /notifications/unread-count`. Authenticated. Returns `{ count: number }` — count of notifications where `is_read=false` for the current user. Used to drive the bell badge in the UI. |
+| BL-68 | Create genre | `POST /genres`. ADMIN only. Validate `name` is unique (case-insensitive). Create confirmed genre record. Return `GenreResponse`. |
+| BL-69 | Update genre | `PATCH /genres/:id`. ADMIN only. Update `name`. Validate new name is unique (case-insensitive). Return updated `GenreResponse`. |
+| BL-70 | Delete genre | `DELETE /genres/:id`. ADMIN only. Soft delete the genre. Existing song/playlist associations are kept but the genre no longer appears in browse or suggestion lists. Log to AuditLog (BL-40). |
+| BL-71 | List / get genre | `GET /genres` (public, paginated). `GET /genres/:id` (public). Returns confirmed genres only (deleted_at IS NULL). |
 
 ---
 
@@ -252,8 +284,22 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-20 | Initiate payment | `GET /v1/payment/vn-pay?premiumType=`. Map: 1-month = 30,000 VND, 3-month = 79,000 VND, 6-month = 169,000 VND, 12-month = 349,000 VND. Build VNPay params, sort alphabetically, sign with HMAC-SHA512. Return `paymentUrl`. |
-| BL-21 | VNPay callback | On `responseCode == '00'`: calculate `premiumExpiryDate`, set `premiumStatus=true`, add PREMIUM role (does not replace existing roles), save user, send confirmation email. Return `PremiumResponse`. |
+| BL-20 | Initiate VNPay payment | `GET /payment/vn-pay?premiumType=`. Map: 1-month = 30,000 VND, 3-month = 79,000 VND, 6-month = 169,000 VND, 12-month = 349,000 VND. Build VNPay params, sort alphabetically, sign with HMAC-SHA512. Return `paymentUrl`. |
+| BL-21 | VNPay callback | On `responseCode == '00'`: calculate `premiumExpiryDate`, set `premiumStatus=true`, add PREMIUM role (does not replace existing roles), save user, send in-app + email confirmation. Return `PremiumResponse`. |
+
+### MoMo Payment Flow
+
+| Code | Name | Description |
+|---|---|---|
+| BL-76 | Initiate MoMo payment | `GET /payment/momo?premiumType=`. Same tier pricing as VNPay. Build MoMo params, sign with HMAC-SHA256. Return `paymentUrl` (MoMo redirect). |
+| BL-77 | MoMo callback | Verify MoMo signature: recompute HMAC-SHA256 over the callback params using `accessKey + secretKey`; reject with 400 if signature mismatch. On `resultCode == 0`: calculate `premiumExpiryDate`, set `premiumStatus=true`, add PREMIUM role (does not replace existing roles), save user, send in-app + email confirmation. Return `PremiumResponse`. |
+
+### Admin Manual Premium Management
+
+| Code | Name | Description |
+|---|---|---|
+| BL-74 | Admin grant premium | `POST /admin/users/:id/premium`. ADMIN only. Body: `{ premiumType, reason }`. Calculate `premiumExpiryDate` from `premiumType` using the same tier durations. Set `premiumStatus=true`, add PREMIUM role. Create a `payment_records` entry with `status=ADMIN_GRANTED` and `amount_vnd=0`. Log to AuditLog (BL-40). Send **in-app notification and email** to user (template 14.2). Return `PremiumResponse`. |
+| BL-75 | Admin revoke premium | `DELETE /admin/users/:id/premium`. ADMIN only. Body: `{ reason }`. Set `premiumStatus=false`, remove PREMIUM role. Trigger BL-56 (revoke all download licenses). Log to AuditLog (BL-40). Send **in-app notification and email** to user. Return `UserResponse`. |
 
 ---
 
@@ -332,7 +378,7 @@ Artists schedule a future release date for a song. While `SCHEDULED`, a public t
 |---|---|
 | 24 hours before `dropAt` | `UPCOMING_DROP` FeedEvent sent to all artist followers |
 | 1 hour before `dropAt` | Second `UPCOMING_DROP` FeedEvent sent |
-| At `dropAt` | `NEW_RELEASE` FeedEvent sent to followers + direct notification to opted-in users (BL-64) |
+| At `dropAt` | `NEW_RELEASE` FeedEvent sent to followers + in-app notification to opted-in users (BL-64) |
 | On cancellation | `DROP_CANCELLED` notification to opted-in users and followers who received the 24h notice |
 
 ### 12.3 Business Logic
@@ -344,7 +390,7 @@ Artists schedule a future release date for a song. While `SCHEDULED`, a public t
 | BL-61 | Drop notifications | When song enters SCHEDULED: enqueue two notification jobs — 24h before and 1h before `dropAt`. Each sends `UPCOMING_DROP` FeedEvent to all artist followers. If drop is cancelled before job fires, dequeue both jobs. |
 | BL-62 | Drop firing cron | Cron: every minute. Query `WHERE status=SCHEDULED AND dropAt <= now`. For each: set `status=LIVE`, insert `NEW_RELEASE` FeedEvent for followers, add to search/browse. Log `DROP_FIRED` to AuditLog. Index required on `(status, dropAt)`. |
 | BL-63 | Drop cancellation | Artist or admin: `DELETE /songs/:id/drop`. Sets `dropAt=null`, reverts `status=APPROVED` (no re-approval needed). Dequeues pending notification jobs. Sends `DROP_CANCELLED` to opted-in users. |
-| BL-64 | Notify me opt-in | `POST /songs/:id/notify` (authenticated). Creates `DropNotification` record (`userId`, `songId`). At drop time cron, send direct notification to all opted-in users in addition to followers. `DELETE /songs/:id/notify` to opt out. |
+| BL-64 | Notify me opt-in | `POST /songs/:id/notify` (authenticated). Creates `DropNotification` record (`userId`, `songId`). At drop time cron, send **in-app notification** to all opted-in users in addition to followers. In-app notification is stored in the `notifications` table and surfaced in the user's notification bell/inbox. `DELETE /songs/:id/notify` to opt out. |
 | BL-65 | Drop rescheduling | `PATCH /songs/:id/drop` — artist updates `dropAt` once, at least 24h before original time. New `dropAt` must be at least 1h in future. Reschedule notification jobs. Send `DROP_RESCHEDULED` FeedEvent to opted-in users and followers. Second reschedule requires admin approval. |
 
 ---
@@ -364,9 +410,95 @@ Artists schedule a future release date for a song. While `SCHEDULED`, a public t
 
 ---
 
-## 14. Business Logic Reference Index
+## 14. Email Notification Templates
 
-All BL codes in numerical order. Total: **65 codes**.
+All emails are sent asynchronously and must never block API responses.
+
+---
+
+### 14.1 Email Verification (sent on BL-01, BL-46, BL-79)
+
+| Field | Value |
+|---|---|
+| **Subject** | Verify your email — Music App |
+| **To** | Registered user email |
+| **Body** | Hi `{name}`, your verification code is: **`{code}`**. This code expires in 10 minutes. If you did not register, ignore this email. |
+| **Action** | User enters the code in-app → triggers BL-78 |
+
+---
+
+### 14.2 Premium Activation (sent on BL-21, BL-77, BL-74)
+
+| Field | Value |
+|---|---|
+| **Subject** | Premium activated — Welcome to Music App Premium! |
+| **To** | User email |
+| **Body** | Hi `{name}`, your Premium plan has been activated successfully. **Plan:** `{premiumType}` · **Expires:** `{premiumExpiryDate}` · **Amount paid:** `{amountVnd}` VND. You now have access to 320 kbps audio, offline downloads (up to 100 songs), and higher upload limits. Enjoy! |
+| **Note** | If granted by Admin (BL-74), `Amount paid` shows "Complimentary" and `Plan` shows the tier granted. |
+
+---
+
+### 14.3 Premium Expiry Warning (future cron — not yet a BL)
+
+> Not currently implemented. Recommended: send a warning email 3 days before `premiumExpiryDate`. Add as a new cron BL when ready.
+
+---
+
+### 14.4 Song Approval / Rejection (sent on BL-37, also triggers in-app notification)
+
+| Field | Value |
+|---|---|
+| **Subject (approved)** | Your song has been approved — Music App |
+| **Subject (rejected)** | Your song was not approved — Music App |
+| **To** | Song uploader email |
+| **Body (approved)** | Hi `{name}`, your song **"`{songTitle}`"** has been approved and is now LIVE on the platform. |
+| **Body (rejected)** | Hi `{name}`, your song **"`{songTitle}`"** was not approved. Reason: `{reason}`. You may revise and re-upload. |
+
+---
+
+### 14.6 Reupload Required (sent on BL-84, also triggers in-app notification)
+
+| Field | Value |
+|---|---|
+| **Subject** | Action required: your song needs changes — Music App |
+| **To** | Song uploader email |
+| **Body** | Hi `{name}`, your song **"`{songTitle}`"** requires changes before it can be approved. Admin notes: `{reuploadReason}`. Please update your song and resubmit via the app. |
+
+---
+
+### 14.7 Song Restored (sent on BL-83, also triggers in-app notification)
+
+| Field | Value |
+|---|---|
+| **Subject** | Your song is live again — Music App |
+| **To** | Song uploader email |
+| **Body** | Hi `{name}`, your song **"`{songTitle}`"** has been restored and is now LIVE on the platform again. |
+
+---
+
+### 14.8 Premium Revoked (sent on BL-75, also triggers in-app notification)
+
+| Field | Value |
+|---|---|
+| **Subject** | Your Premium has been revoked — Music App |
+| **To** | User email |
+| **Body** | Hi `{name}`, your Premium access has been revoked by an administrator. Reason: `{reason}`. Your downloaded songs will remain on your device but will become unplayable. Please contact support if you believe this is a mistake. |
+
+---
+
+### 14.9 Account Locked (sent on BL-43)
+
+| Field | Value |
+|---|---|
+| **Subject** | Your account has been temporarily locked — Music App |
+| **To** | User email |
+| **Body** | Hi `{name}`, your account has been locked for 15 minutes due to 5 consecutive failed login attempts. If this wasn't you, consider resetting your password. |
+
+---
+
+## 15. Business Logic Reference Index
+
+All BL codes in numerical order. Total: **85 codes**.
 
 | Code | Name | Section |
 |---|---|---|
@@ -389,7 +521,7 @@ All BL codes in numerical order. Total: **65 codes**.
 | BL-17 | Playlist deletion cascade | 4. Content Management |
 | BL-18 | Album deletion cascade | 4. Content Management |
 | BL-19 | Artist deletion cascade | 4. Content Management |
-| BL-20 | Initiate payment (VNPay) | 8. Premium & Payments |
+| BL-20 | Initiate VNPay payment | 8. Premium & Payments |
 | BL-21 | VNPay callback | 8. Premium & Payments |
 | BL-22 | Playlist creator assignment | 4. Content Management |
 | BL-23 | Search | 9. Search & Pagination |
@@ -445,3 +577,23 @@ All BL codes in numerical order. Total: **65 codes**.
 | BL-63 | Drop cancellation | 12. Artist Live Drops |
 | BL-64 | Notify me opt-in | 12. Artist Live Drops |
 | BL-65 | Drop rescheduling | 12. Artist Live Drops |
+| BL-66 | Update user profile | 3. Authentication |
+| BL-67 | Update artist profile | 3. Authentication |
+| BL-68 | Create genre | 6. Social & Discovery |
+| BL-69 | Update genre | 6. Social & Discovery |
+| BL-70 | Delete genre | 6. Social & Discovery |
+| BL-71 | List / get genre | 6. Social & Discovery |
+| BL-72 | Unfollow user / artist | 6. Social & Discovery |
+| BL-73 | Follower / following lists | 6. Social & Discovery |
+| BL-74 | Admin grant premium | 8. Premium & Payments |
+| BL-75 | Admin revoke premium | 8. Premium & Payments |
+| BL-76 | Initiate MoMo payment | 8. Premium & Payments |
+| BL-77 | MoMo callback | 8. Premium & Payments |
+| BL-78 | Verify email | 3. Authentication |
+| BL-79 | Resend verification email | 3. Authentication |
+| BL-80 | List notifications | 6. Social & Discovery |
+| BL-81 | Mark notification read | 6. Social & Discovery |
+| BL-82 | Unread notification count | 6. Social & Discovery |
+| BL-83 | Restore taken-down song | 4. Content Management |
+| BL-84 | Request reupload | 4. Content Management |
+| BL-85 | Resubmit song | 4. Content Management |
