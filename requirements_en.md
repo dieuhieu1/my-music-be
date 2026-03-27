@@ -29,6 +29,8 @@ This document is the single source of truth for all business logic, roles, featu
 | Auth | JWT (access + refresh tokens), bcrypt (rounds = 10) |
 | Payments | VNPay, MoMo |
 | Scheduled tasks | Cron jobs (including per-minute for drop firing) |
+| Async job queue | **BullMQ (Redis-backed)** — used for drop notification jobs (24h/1h before dropAt), session TTL cleanup, audio metadata extraction (BL-37A), and all async email sending |
+| Email | **SMTP via Nodemailer** — all emails sent asynchronously via BullMQ, never blocking API responses |
 | Storage | File server with encrypted `.enc` variants for downloadable songs |
 | AI | Rules-based engine now; ML integration path kept open |
 
@@ -111,7 +113,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | Code | Name | Description |
 |---|---|---|
 | BL-02 | Login | Find user by email (throw UNAUTHENTICATED if not found). Compare password with bcrypt (throw UNAUTHENTICATED if mismatch). Check account not locked (BL-43). Generate access + refresh tokens, save refresh token, create/update Session record (BL-42). Return `TokenResponse`. |
-| BL-03 | Logout | Verify access token. Store `jti` + expiry in `InvalidatedToken` table (blacklist). Invalidate associated Session record. Return void. |
+| BL-03 | Logout | `POST /auth/logout`. Requires `Authorization: Bearer <accessToken>` header. Backend executes the following **sequentially within a single transaction**: (1) **Token invalidation** — extract `jti` from the access token, insert into `InvalidatedToken` table with its expiry to block replay attacks; (2) **Session clearance** — invalidate the refresh token and soft-delete the associated Session record for this device/login instance; (3) **Play queue hard-delete** — permanently delete all queue rows for this user (BL-31, not soft delete). Returns void. **Frontend teardown:** on success, client clears all local auth state (JWT + refresh token from storage/cookies), clears local queue state, and redirects to Login or Home screen. |
 | BL-04 | Refresh token | Verify refresh token signature + expiry. Check token exists in `tbl_refresh_token` and not expired. Get user from `sub` claim. Generate new access token. Return `TokenResponse`. |
 | BL-05 | Change password | Get current user from JWT. Verify `oldPassword` matches hash. Validate `newPassword == confirmPassword`. Hash new password. Update user in DB. Return `UserResponse`. |
 
@@ -154,14 +156,22 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | BL-48 | Upload restriction | `POST /songs/upload` checks `user.role IN [ARTIST, ADMIN]`. If USER role, throw FORBIDDEN. All uploads regardless of role enter `status=PENDING`. Admin uploads also go through PENDING to maintain audit trail. |
 | BL-37 | Song approval workflow | Admin reviews a PENDING song. Actions: **Approve** → `status=APPROVED` (or `SCHEDULED` if `dropAt` set); **Reject** → `status=REJECTED` with required reason (permanent); **Request reupload** → `status=REUPLOAD_REQUIRED` with required notes (BL-84). Only LIVE songs appear in browse/search. Notify uploader via **in-app notification and email** for all outcomes (approved, rejected, reupload required). Log to AuditLog (BL-40). |
 | BL-44 | File validation on upload | Validate MIME type via magic bytes, enforce max duration (20 min), strip embedded metadata. Reject silently renamed files. Server also generates an AES-256 encrypted `.enc` variant for offline download use. |
-| BL-39 | Upload limits | Non-premium ARTIST: max 50 songs, max 50 MB/file. PREMIUM ARTIST: max 200 songs, max 200 MB/file. ADMIN: no limit. Return `UPLOAD_LIMIT_EXCEEDED` with current usage stats on breach. |
-| BL-49 | Genre suggestion on upload | Artist may include `suggestedGenres[]` not in the confirmed list. Each creates a `GenreSuggestion` record (name, suggestedBy, songId, status=PENDING). Admin reviews in the same queue as song uploads. On approval: add to confirmed list and tag the song. |
+| BL-39 | Upload limits | Non-premium ARTIST: max 50 songs, max 50 MB/file. PREMIUM ARTIST: max 200 songs, max 200 MB/file. ADMIN: no limit. **Song count is calculated from songs with status `PENDING`, `APPROVED`, `SCHEDULED`, or `LIVE` only — `REJECTED` and `REUPLOAD_REQUIRED` songs do not consume a slot.** Return `UPLOAD_LIMIT_EXCEEDED` with current usage stats on breach. |
+| BL-49 | Genre suggestion on upload | Artist may include `suggestedGenres[]` not in the confirmed list. Each creates a `GenreSuggestion` record (`name`, `suggestedBy`, `songId`, `status=PENDING`). Admin reviews in the same queue as song uploads. On approval, the full retroactive tagging workflow below applies. |
+
+**BL-49 Approval & Retroactive Tagging Workflow:**
+
+1. **Approval trigger** — Admin approves a `GenreSuggestion` (e.g. `"Vinahouse"`) via the admin dashboard. The system creates a new confirmed `Genre` entity.
+2. **Retroactive scan** — Upon genre creation, the system queries all `GenreSuggestion` records with `status=PENDING` whose `name` matches the approved name (case-insensitive, whitespace-trimmed — `" Vinahouse "`, `"vinahouse"`, and `"VinaHouse"` all match).
+3. **Bulk tagging** — The system maps the new `Genre` to all matching songs in a single background operation (enqueued via BullMQ to avoid blocking the admin response).
+4. **Cleanup** — All matched `GenreSuggestion` records are marked `status=APPROVED` and the temporary suggestion text is cleared from those songs.
+5. **String normalisation rule** — All genre name comparisons must use `LOWER(TRIM(name))` to ensure consistent matching.
 
 ### 4.3 Counters & Computed Fields
 
 | Code | Name | Description |
 |---|---|---|
-| BL-09 | Song listener counter | Every `GET /songs/:id` increments `song.listener` by 1. |
+| BL-09 | Song listener counter | Every `GET /songs/:id` increments `song.listener` by 1 (all-time counter). Simultaneously **upserts** a record in the `SongDailyStats` table for `(song_id, date=today)`, incrementing its `play_count` by 1. This dual-write feeds both the all-time display counter and the time-bound analytics engine (BL-51). |
 | BL-10 | Album follower counter | Every `GET /albums/:id` increments `album.follower` by 1. |
 | BL-11 | Artist follower counter | Every `GET /artists/:id` increments `artist.follower` by 1. |
 | BL-12 | Playlist counters | Every `GET /playlists/:id` increments both `playlist.follower` and `playlist.listener` by 1. |
@@ -172,7 +182,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-16 | Song deletion cascade | On delete: remove song from all playlists. Update album `totalTracks` + `totalHours`. Revoke all DownloadRecords for that song (set `revokedAt = now`). |
+| BL-16 | Song deletion cascade | On **hard delete**: remove song from all playlists, update album `totalTracks` + `totalHours`, revoke all DownloadRecords for that song (`revokedAt = now`). **TAKEN_DOWN is NOT a delete** — playlist-song associations are preserved. `GET /playlists/:id` still returns TAKEN_DOWN songs in the response array but with `audio_url` omitted/nullified to prevent playback. Frontend renders TAKEN_DOWN songs as greyed-out and unplayable; the queue auto-skips them during full-playlist playback. Users may manually remove a TAKEN_DOWN song from their playlist. |
 | BL-17 | Playlist deletion cascade | On delete: remove from all users' `savedPlaylists`. Remove all playlist-song associations. |
 | BL-18 | Album deletion cascade | On delete album: delete ALL songs in that album (triggers BL-16 for each). |
 | BL-19 | Artist deletion cascade | On delete: remove artist from all songs' and albums' artist lists. Do NOT delete the songs or albums themselves. |
@@ -207,10 +217,10 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | Code | Name | Description |
 |---|---|---|
 | BL-28 | Audio quality tiers | Standard 128 kbps for non-premium. High 320 kbps for PREMIUM users. Downgrade on next track request if premium expires mid-session. |
-| BL-29 | Playback history | Record `PlaybackHistory` entry (`userId`, `songId`, `playedAt`, `skipped: boolean`) when user plays past 30 seconds. Plays < 10 seconds recorded as `skipped=true`. Cap at 200 entries per user. |
-| BL-30 | Resume playback | Store last `positionSeconds` per user per song in `PlaybackState` table. On app load, return last played song + position for 'Continue listening' prompt. |
+| BL-29 | Playback history | ~~Removed~~ — playback history tracking is not implemented. The `PlaybackHistory` table and all related recording logic are excluded from the system. |
+| BL-30 | Resume playback | Store last `positionSeconds` per user per song in `PlaybackState` table. Expose via `GET /playback/state` (authenticated) — called on app load to return the last played song + position for the 'Continue listening' prompt. Response includes: `songId`, `songTitle`, `coverArt`, `artistName`, `positionSeconds`. Returns `null` if no playback state exists for the user. |
 | BL-31 | Queue management | Server-side play queue per user. Endpoints: add, remove, reorder, clear. Supports shuffle mode. On logout: **hard-delete** all queue rows for that user (not soft delete — queue is gone permanently). On next login, queue starts empty; a new queue is created automatically when the user begins playing a song. |
-| BL-51 | Artist analytics | `GET /artist/me/analytics` — ARTIST role only. Returns per-song play counts, like counts, follower count, top 5 songs by plays in last 30 days. Admins access any artist via `GET /admin/artists/:id/analytics`. |
+| BL-51 | Artist analytics | `GET /artist/me/analytics` — ARTIST role only. Admins access any artist via `GET /admin/artists/:id/analytics`. Returns: **(1) All-time play counts** per song — sourced from `song.listener` counter (BL-09). **(2) Time-bound plays (last 30 days)** — sourced from `SongDailyStats` table: `SELECT song_id, SUM(play_count) FROM song_daily_stats WHERE date >= NOW() - 30 days GROUP BY song_id`. **(3) Top 5 songs by plays in last 30 days** — derived from the same `SongDailyStats` query, limited to top 5. **(4) Per-song like counts** — sourced from `LikedSongs` playlist associations. **(5) Follower count** — sourced from `ArtistProfile.followerCount`. `SongDailyStats` schema: `(id, song_id FK, date DATE, play_count INT)` with a unique index on `(song_id, date)` for upsert performance. |
 
 ---
 
@@ -218,15 +228,32 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-32 | Follow user / artist | `POST /users/:id/follow`. Authenticated user follows another user or artist. Create `user_follows` record. Increment followee's `followerCount`. Following an artist surfaces their public playlists and drop announcements in the feed. Return `FollowStatsResponse`. |
+| BL-32 | Follow user / artist | `POST /users/:id/follow`. Authenticated user follows another user or artist. **Self-follow is forbidden — throw `FORBIDDEN` if `followeeId === currentUserId`.** Create `user_follows` record. Increment followee's `followerCount`. Following an artist surfaces their public playlists and drop announcements in the feed. Return `FollowStatsResponse`. |
 | BL-72 | Unfollow user / artist | `DELETE /users/:id/follow`. Authenticated user unfollows. Soft-delete the `user_follows` record. Decrement followee's `followerCount`. Return `FollowStatsResponse`. |
 | BL-73 | Follower / following lists | `GET /users/:id/followers` — paginated list of users who follow user `:id`. `GET /users/:id/following` — paginated list of users/artists that user `:id` follows. Both public. Return `PaginatedData<UserResponse>`. |
 | BL-33 | Activity feed | Generate feed from followed users and artists. Events: new playlist, song liked, artist followed, `NEW_RELEASE` (drop fired), `UPCOMING_DROP` (notification). Store as `FeedEvent` (`actorId`, `eventType`, `targetId`, `createdAt`). Return paginated, newest first. |
-| BL-34 | Song likes | Users can like/unlike songs. `LikedSongs` is a special playlist per user — **created atomically on the user's first like**, not at registration. If the playlist does not exist when a like is recorded, create it first then add the song. Return `isLiked: boolean` on `SongResponse`. |
+| BL-34 | Song likes | Users can like/unlike songs. `LikedSongs` is a `Playlist` entity with a special `isLikedSongs: boolean` flag — **created atomically on the user's first like**, not at registration. If the playlist does not exist when a like is recorded, create it first then add the song. Return `isLiked: boolean` on `SongResponse`. |
 | BL-36 | Genre system | Songs and playlists have genres (many-to-many). Confirmed genres are admin-managed (CRUD via BL-68–71). Artists suggest new genres during upload (BL-49). Feeds AI recommendation engine. |
 | BL-80 | List notifications | `GET /notifications` (authenticated, paginated). Returns the current user's in-app notifications ordered by `created_at DESC`. Each item includes: `id`, `type`, `title`, `body`, `isRead`, `targetId`, `targetType`, `createdAt`. |
 | BL-81 | Mark notification read | `PATCH /notifications/:id/read`. Authenticated. Sets `is_read=true` and `read_at=now` on the notification. User can only mark their own notifications. Return updated notification. |
 | BL-82 | Unread notification count | `GET /notifications/unread-count`. Authenticated. Returns `{ count: number }` — count of notifications where `is_read=false` for the current user. Used to drive the bell badge in the UI. |
+
+#### Notification `type` Enum
+
+All in-app notifications stored in the `notifications` table must use one of the following `type` values:
+
+| Type | Triggered By |
+|---|---|
+| `SONG_APPROVED` | BL-37 — admin approves a song |
+| `SONG_REJECTED` | BL-37 — admin rejects a song |
+| `SONG_REUPLOAD_REQUIRED` | BL-84 — admin requests changes before approval |
+| `SONG_RESTORED` | BL-83 — admin restores a taken-down song to LIVE |
+| `PREMIUM_ACTIVATED` | BL-21, BL-77, BL-74 — premium activated via payment or admin grant |
+| `PREMIUM_REVOKED` | BL-75 — admin manually revokes premium |
+| `UPCOMING_DROP` | BL-61 — sent 24h and 1h before `dropAt` to artist followers |
+| `NEW_RELEASE` | BL-62, BL-64 — drop fired; sent to artist followers and opted-in users |
+| `DROP_CANCELLED` | BL-63 — artist or admin cancels a scheduled drop |
+| `DROP_RESCHEDULED` | BL-65 — drop date changed by artist or admin |
 | BL-68 | Create genre | `POST /genres`. ADMIN only. Validate `name` is unique (case-insensitive). Create confirmed genre record. Return `GenreResponse`. |
 | BL-69 | Update genre | `PATCH /genres/:id`. ADMIN only. Update `name`. Validate new name is unique (case-insensitive). Return updated `GenreResponse`. |
 | BL-70 | Delete genre | `DELETE /genres/:id`. ADMIN only. Soft delete the genre. Existing song/playlist associations are kept but the genre no longer appears in browse or suggestion lists. Log to AuditLog (BL-40). |
@@ -242,9 +269,9 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-35 | Rules-based recommendation | Recommend LIVE songs from genres played most in last 30 days. Fallback to globally most-listened LIVE songs if sparse. Recalculate daily. |
-| BL-35A | Cold start strategy | New users with < 5 non-skipped plays: prompt for genre preferences at onboarding. Use selection to seed initial recommendations. |
-| BL-35B | Skip feedback loop | Plays with `skipped=true` (< 10 sec) act as negative signals. Weight skipped songs/artists/genres lower. Skipped weight decays to neutral after 90 days. |
+| BL-35 | Rules-based recommendation | Recommend LIVE songs based on the user's **liked genres** (derived from liked songs and followed artists) since BL-29 playback history is removed. Fallback to globally most-listened LIVE songs if sparse. Recalculate daily via a scheduled batch job. **Storage: Hybrid Cache-Aside** — batch job writes results to a dedicated `recommendation_cache` DB table (persistent source of truth). On request: check Redis first (24h TTL); on cache miss, fetch from DB, return to user, and populate Redis. |
+| BL-35A | Cold start strategy | New users with no liked songs or followed artists: prompt for genre preferences at onboarding. Use selection to seed initial recommendations. |
+| BL-35B | Skip feedback loop | ~~Removed~~ — depends on `PlaybackHistory` (BL-29, removed). Skip signals are no longer collected. |
 
 ### 7.2 Mood-Based Recommendation
 
@@ -257,23 +284,88 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-36A | Explicit mood selection | User selects mood. System maps mood → genre/BPM/energy filters and queries LIVE songs. Return as mood playlist. Combinable with BL-35. |
-| BL-36B | Inferred mood (context) | If no explicit mood: infer from time of day (morning → focus, night → chill) and day of week (weekend → happy). Fallback to top genre if confidence below threshold. |
+| BL-36A | Explicit mood selection | User selects mood. System maps mood → genre/BPM/energy filters and queries LIVE songs. Return as mood playlist wrapped in metadata object. Combinable with BL-35. |
+| BL-36B | Inferred mood (context) | If no explicit mood: infer from user's **local** time of day and day of week (morning → focus, night → chill, weekend → happy). Client **must** supply either `timezone` (IANA string, e.g. `Asia/Ho_Chi_Minh`) or `local_hour` (0–23 integer) so the server does not use UTC time for inference. Fallback to top genre if confidence below threshold. |
+
+#### Mood Recommendation Endpoint
+
+```
+GET /recommendations/mood
+```
+
+**Query Parameters:**
+
+| Parameter | Required | Description |
+|---|---|---|
+| `mood` | No | One of: `happy`, `sad`, `focus`, `chill`, `workout`. If omitted, server infers mood via BL-36B. |
+| `timezone` | Conditionally required | IANA timezone string (e.g. `Asia/Ho_Chi_Minh`). Required when `mood` is omitted and `local_hour` is not provided. |
+| `local_hour` | Alternative to `timezone` | Integer 0–23 representing the client's current local hour. Accepted as a simpler alternative to `timezone`. |
+| `limit` | No | Number of songs to return. Default: 20. Max: 50. |
+
+**Device Context:** Desktop-only for current scope. `X-Device-Type` header and mobile-specific filters (BL-38A) are not implemented.
+
+**Response Payload:**
+
+```json
+{
+  "mood": "focus",
+  "inferredMood": true,
+  "localHourUsed": 8,
+  "totalItems": 20,
+  "items": [ /* SongResponse[] */ ]
+}
+```
+
+| Field | Description |
+|---|---|
+| `mood` | The mood used for filtering (either explicit or inferred). |
+| `inferredMood` | `true` if mood was inferred from time context; `false` if explicitly provided. |
+| `localHourUsed` | The local hour the server resolved from `timezone` or `local_hour`. Useful for client debug and UI labels (e.g. "Your Morning Focus Mix"). |
+| `totalItems` | Count of songs returned (≤ `limit`). |
+| `items` | Array of `SongResponse` objects (LIVE songs only). |
 
 ### 7.3 Smart Track Transitions
 
 | Code | Name | Description |
 |---|---|---|
-| BL-37A | Compatibility score | Score consecutive pairs from BPM difference, Camelot key, and energy delta (0–100). Stored as song metadata set on upload. |
-| BL-37B | Crossfade | Configurable per user (0–12 sec, default 3s). Server signals to client in `NowPlaying` response. Client handles audio fade. |
-| BL-37C | Smart playlist ordering | Reorder tracks to maximize average compatibility using greedy nearest-neighbor. Applied only when user enables 'Smart Order'. |
+| BL-37A | Compatibility score & audio metadata | Score consecutive pairs from BPM difference, Camelot key, and energy delta (0–100). Full extraction spec below. |
+| BL-37B | Crossfade | ~~Removed~~ — crossfade feature removed from product scope to simplify audio player architecture and ensure playback stability. Standard sequential track switching applies. |
+| BL-37C | Smart Order | Toggle available in the audio player UI (icon button, similar to Shuffle). **Toggle ON:** client sends queue reorder request to backend; backend reorders all **upcoming unplayed tracks** in the user's current play queue using greedy nearest-neighbor algorithm evaluated on BPM difference, Camelot Key compatibility, and Energy delta (metadata from BL-37A). Reordered queue is persisted server-side (BL-31). Player executes standard sequential playback on the new order — no audio overlap. **Toggle OFF:** queue immediately reverts to original default sequential order. The Smart Order icon in the player reflects active state (highlighted when ON, muted when OFF). |
+
+#### BL-37A: Audio Metadata Extraction & Feedback Mechanism
+
+**1. Processing Architecture (Hybrid Approach)**
+
+The system automatically calculates audio metadata (BPM, Camelot Key, and Energy) from the raw audio file using an asynchronous background worker (Python DSP sidecar using librosa/essentia via BullMQ).
+
+| Field | Editable by Artist | Notes |
+|---|---|---|
+| BPM | Yes | Auto-extracted, surfaced in upload UI. Artist may override to correct half-time/double-time errors. |
+| Camelot Key | Yes | Auto-extracted, surfaced in upload UI. Artist may override. |
+| Energy | No | Calculated by machine only. Saved silently to DB. Never exposed to artist. Ensures integrity of compatibility scoring. |
+
+**2. Client-Server Communication (Short-Polling)**
+
+The system uses **Short-Polling** (not WebSockets) to minimize infrastructure complexity.
+
+- On upload success, the server returns a `jobId`.
+- The client polls `GET /songs/upload/:jobId/status` every **3 seconds** until the job reaches a terminal state (`completed` or `failed`).
+
+**3. UI State Machine**
+
+| State | Trigger | UI Behaviour |
+|---|---|---|
+| **Initiation** | File accepted by server | Server returns `jobId`. BPM and Key fields are **disabled** and show a "Processing..." loading state. Polling begins. |
+| **Processing** | Poll returns `status: "pending"` or `"processing"` | Fields remain disabled. Loading state persists. |
+| **Success** | Poll returns `status: "completed"` | Polling stops. Fields are **auto-filled** with extracted BPM and Key values and **unlocked** for manual override. |
+| **Error / Timeout** | Poll returns `status: "failed"` or no response after timeout | Polling stops. Gentle error message shown: *"Auto-extraction failed"*. Fields are **unlocked** so artist can enter values manually. Energy is left null until a successful extraction or resubmission. |
 
 ### 7.4 Context-Aware Recommendation
 
 | Code | Name | Description |
 |---|---|---|
-| BL-38A | Device context | Mobile → prefer songs < 4 min, higher energy. Desktop → no restriction. Soft filter on BL-35. |
-| BL-38B | Time context | Morning 6–10 AM: focus/chill. Afternoon: neutral. Evening 6–10 PM: chill/happy. Night 10 PM–2 AM: lo-fi. |
+| BL-38A | Device context | **Desktop only (current scope).** No device filter applied — all songs eligible regardless of duration or energy. Mobile context deferred to a future version. |
+| BL-38B | Time context | Morning 6–10 AM: focus/chill. Afternoon: neutral. Evening 6–10 PM: chill/happy. Night 10 PM–2 AM: lo-fi. Always resolved from client's local time (see BL-36B timezone handling). |
 | BL-38C | Location context | Coarse location → activity context. Location never stored — in-request only. Privacy notice on first grant. |
 
 ---
@@ -285,7 +377,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | Code | Name | Description |
 |---|---|---|
 | BL-20 | Initiate VNPay payment | `GET /payment/vn-pay?premiumType=`. Map: 1-month = 30,000 VND, 3-month = 79,000 VND, 6-month = 169,000 VND, 12-month = 349,000 VND. Build VNPay params, sort alphabetically, sign with HMAC-SHA512. Return `paymentUrl`. |
-| BL-21 | VNPay callback | On `responseCode == '00'`: calculate `premiumExpiryDate`, set `premiumStatus=true`, add PREMIUM role (does not replace existing roles), save user, send in-app + email confirmation. Return `PremiumResponse`. |
+| BL-21 | VNPay callback | **First verify signature:** recompute HMAC-SHA512 over all callback params (sorted alphabetically, excluding `vnp_SecureHash`) using the VNPay secret key; reject with 400 if `vnp_SecureHash` mismatch. On `responseCode == '00'`: calculate `premiumExpiryDate`, set `premiumStatus=true`, add PREMIUM role (does not replace existing roles), save user, send in-app + email confirmation. Return `PremiumResponse`. |
 
 ### MoMo Payment Flow
 
@@ -307,7 +399,7 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 
 | Code | Name | Description |
 |---|---|---|
-| BL-23 | Search | Search format: array of strings e.g. `["name~Rock", "listener>1000"]`. Operators: `~` (LIKE), `>` (gt), `<` (lt). Combined with AND. Build TypeORM QueryBuilder dynamically. Search only returns LIVE songs — SCHEDULED songs excluded. |
+| BL-23 | Search | Search format: array of strings e.g. `["name~Rock", "listener>1000"]`. Operators: `~` (LIKE), `>` (gt), `<` (lt). Combined with AND. Build TypeORM QueryBuilder dynamically. **Searches across four entities: songs, albums, artists, and playlists.** Search only returns LIVE songs — SCHEDULED songs excluded from song results. |
 | BL-24 | Pagination | Default: `page=1`, `size=10`, `sortBy='id'`. All list endpoints return: `page`, `size`, `totalPages`, `totalItems`, `items[]`. |
 
 ---
@@ -350,10 +442,10 @@ Premium users can download approved songs for offline play. Files are AES-256 en
 
 | Code | Name | Description |
 |---|---|---|
-| BL-52 | Download eligibility check | `POST /songs/:id/download` validates: user has PREMIUM role, song `status` is LIVE, user's `downloadCount` is below quota. Return `DOWNLOAD_LIMIT_EXCEEDED` or `PREMIUM_REQUIRED` on failure. |
+| BL-52 | Download eligibility check | `POST /songs/:id/download` validates: user has PREMIUM role (or is ADMIN), song `status` is LIVE, user's `downloadCount` is below quota. **ADMIN bypasses the PREMIUM_REQUIRED check entirely and has no download quota.** Return `DOWNLOAD_LIMIT_EXCEEDED` or `PREMIUM_REQUIRED` on failure (non-admin, non-premium users only). |
 | BL-53 | Download license issuance | On pass: retrieve song's AES-256 key, wrap with `HMAC(userId+serverSecret)`, generate license JWT `{ songId, userId, encryptedKey, expiresAt: now+30d, version }`. Create `DownloadRecord` (`userId`, `songId`, `issuedAt`, `expiresAt`, `revokedAt: null`). Return signed one-time download URL (5-min TTL) + license JWT. |
 | BL-54 | Download quota tracking | `downloadCount = DownloadRecord WHERE userId=X AND revokedAt IS NULL`. Increment on new download, decrement when user removes a song. Enforce at BL-52 check time. |
-| BL-55 | License revalidation (online) | `POST /songs/downloads/revalidate` — called silently on app open when online. For each active DownloadRecord: if PREMIUM still active, reissue fresh license JWT (30-day reset). If PREMIUM lapsed, set `revokedAt=now` and return `revoked: true` so client greys out the song. |
+| BL-55 | License revalidation (online) | `POST /songs/downloads/revalidate` — called silently on app open when online. **Request body: `{ songIds: string[] }` — client sends only the IDs of songs it currently has downloaded locally.** Server queries `DownloadRecord WHERE userId=X AND songId IN (songIds)` for targeted lookup performance. For each matched record: if PREMIUM still active, reissue fresh license JWT (30-day reset); if PREMIUM lapsed, set `revokedAt=now` and return `revoked: true` so client greys out the song. |
 | BL-56 | Premium lapse cascade | When BL-26 cron downgrades a user: set `revokedAt=now` on all their DownloadRecords. Files remain on device but become unplayable at next revalidation. Records kept for 7-day grace period in case user renews. After 7 days, BL-58 hard-deletes. |
 | BL-57 | Manual download removal | `DELETE /songs/downloads/:songId` — user removes a downloaded song. Set `DownloadRecord.revokedAt=now`. Return updated `downloadCount`. Client deletes the local `.enc` file. |
 
@@ -391,7 +483,7 @@ Artists schedule a future release date for a song. While `SCHEDULED`, a public t
 | BL-62 | Drop firing cron | Cron: every minute. Query `WHERE status=SCHEDULED AND dropAt <= now`. For each: set `status=LIVE`, insert `NEW_RELEASE` FeedEvent for followers, add to search/browse. Log `DROP_FIRED` to AuditLog. Index required on `(status, dropAt)`. |
 | BL-63 | Drop cancellation | Artist or admin: `DELETE /songs/:id/drop`. Sets `dropAt=null`, reverts `status=APPROVED` (no re-approval needed). Dequeues pending notification jobs. Sends `DROP_CANCELLED` to opted-in users. |
 | BL-64 | Notify me opt-in | `POST /songs/:id/notify` (authenticated). Creates `DropNotification` record (`userId`, `songId`). At drop time cron, send **in-app notification** to all opted-in users in addition to followers. In-app notification is stored in the `notifications` table and surfaced in the user's notification bell/inbox. `DELETE /songs/:id/notify` to opt out. |
-| BL-65 | Drop rescheduling | `PATCH /songs/:id/drop` — artist updates `dropAt` once, at least 24h before original time. New `dropAt` must be at least 1h in future. Reschedule notification jobs. Send `DROP_RESCHEDULED` FeedEvent to opted-in users and followers. Second reschedule requires admin approval. |
+| BL-65 | Drop rescheduling | `PATCH /songs/:id/drop` — artist updates `dropAt` once, at least 24h before original time. New `dropAt` must be at least 1h in future. Reschedule notification jobs. Send `DROP_RESCHEDULED` FeedEvent to opted-in users and followers. **Second reschedule:** artist submits the new `dropAt` → song status reverts to `PENDING` → admin reviews and approves or declines the new release date before it takes effect. |
 
 ---
 
@@ -412,7 +504,7 @@ Artists schedule a future release date for a song. While `SCHEDULED`, a public t
 
 ## 14. Email Notification Templates
 
-All emails are sent asynchronously and must never block API responses.
+All emails are sent asynchronously via **BullMQ + Nodemailer (SMTP)** and must never block API responses.
 
 ---
 
