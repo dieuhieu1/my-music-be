@@ -172,9 +172,9 @@ Three roles exist in the system. `PREMIUM` is a payment tier that stacks on top 
 | Code | Name | Description |
 |---|---|---|
 | BL-09 | Song listener counter | Every `GET /songs/:id` increments `song.listener` by 1 (all-time counter). Simultaneously **upserts** a record in the `SongDailyStats` table for `(song_id, date=today)`, incrementing its `play_count` by 1. This dual-write feeds both the all-time display counter and the time-bound analytics engine (BL-51). |
-| BL-10 | Album follower counter | Every `GET /albums/:id` increments `album.follower` by 1. |
-| BL-11 | Artist follower counter | Every `GET /artists/:id` increments `artist.follower` by 1. |
-| BL-12 | Playlist counters | Every `GET /playlists/:id` increments both `playlist.follower` and `playlist.listener` by 1. |
+| BL-10 | Album listener counter | Every `GET /albums/:id` increments `album.listener` by 1. **Separate from social follow** — `album.followerCount` is only incremented by explicit follow action. |
+| BL-11 | Artist listener counter | Every `GET /artists/:id` increments `artist.listener` by 1. **Separate from social follow** — `artist.followerCount` is only incremented by BL-32 (Follow action). |
+| BL-12 | Playlist counters | Every `GET /playlists/:id` increments `playlist.listener` by 1. `playlist.follower` is a **view-count proxy** (also incremented on GET) and is separate from the save/follow action (BL-13). |
 | BL-14 | Album totalTracks & totalHours | Computed from associated songs. Recalculate on album create/update and when song added/removed. |
 | BL-15 | Playlist totalTracks & totalHours | Same pattern as BL-14. Recalculate on playlist create/update and song added/removed. |
 
