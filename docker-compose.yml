@@ -1,0 +1,132 @@
+networks:
+  mymusic-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+services:
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: mymusic-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-mymusic}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-mymusic_password}
+      POSTGRES_DB: ${DB_NAME:-mymusic_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mymusic-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mymusic} -d ${DB_NAME:-mymusic_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: mymusic-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      ${REDIS_PASSWORD:+--requirepass ${REDIS_PASSWORD}}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - mymusic-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── MinIO ─────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: mymusic-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console → http://localhost:9001
+    volumes:
+      - minio_data:/data
+    networks:
+      - mymusic-net
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+      start_period: 15s
+
+  # ── MailHog (dev SMTP trap) ───────────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mymusic-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI → http://localhost:8025
+    networks:
+      - mymusic-net
+
+  # ── NestJS API ────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    container_name: mymusic-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      DB_HOST: postgres
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio
+      SMTP_HOST: mailhog
+      DSP_URL: http://dsp:5000
+    ports:
+      - "3001:3001"
+    volumes:
+      # Mount source for hot reload — node_modules stays inside the container
+      - ./apps/api/src:/app/apps/api/src
+      - ./packages:/app/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - mymusic-net
+
+  # ── Python DSP Sidecar ────────────────────────────────────────────────────
+  dsp:
+    build:
+      context: ./apps/dsp
+      dockerfile: Dockerfile
+    container_name: mymusic-dsp
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    networks:
+      - mymusic-net

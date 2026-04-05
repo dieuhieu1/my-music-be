@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+*.log
+apps/web
+apps/dsp/.venv
+apps/dsp/venv
+**/__pycache__

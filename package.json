@@ -1,0 +1,16 @@
+{
+  "name": "my-music",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "api:dev": "npm run start:dev --workspace=apps/api",
+    "api:build": "npm run build --workspace=apps/api",
+    "web:dev": "npm run dev --workspace=apps/web",
+    "types:build": "npm run build --workspace=packages/types"
+  }
+}

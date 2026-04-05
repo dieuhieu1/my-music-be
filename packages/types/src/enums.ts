@@ -1,0 +1,96 @@
+// Shared enums — consumed by apps/web (TypeScript) and apps/api.
+// Keep in sync with apps/api/src/common/enums.ts and database_schema.sql.
+
+export enum Role {
+  USER = 'USER',
+  ARTIST = 'ARTIST',
+  ADMIN = 'ADMIN',
+  PREMIUM = 'PREMIUM',
+}
+
+export enum SongStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  SCHEDULED = 'SCHEDULED',
+  LIVE = 'LIVE',
+  REJECTED = 'REJECTED',
+  REUPLOAD_REQUIRED = 'REUPLOAD_REQUIRED',
+  TAKEN_DOWN = 'TAKEN_DOWN',
+}
+
+export enum NotificationType {
+  DROP_UPCOMING = 'DROP_UPCOMING',
+  DROP_FIRED = 'DROP_FIRED',
+  DROP_CANCELLED = 'DROP_CANCELLED',
+  DROP_RESCHEDULED = 'DROP_RESCHEDULED',
+  SONG_APPROVED = 'SONG_APPROVED',
+  SONG_REJECTED = 'SONG_REJECTED',
+  SONG_REUPLOAD_REQUIRED = 'SONG_REUPLOAD_REQUIRED',
+  SONG_RESTORED = 'SONG_RESTORED',
+  PREMIUM_ACTIVATED = 'PREMIUM_ACTIVATED',
+  PREMIUM_REVOKED = 'PREMIUM_REVOKED',
+  NEW_RELEASE = 'NEW_RELEASE',
+}
+
+export enum PaymentProvider {
+  VNPAY = 'VNPAY',
+  MOMO = 'MOMO',
+  ADMIN = 'ADMIN',
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  SUCCESS = 'SUCCESS',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+  ADMIN_GRANTED = 'ADMIN_GRANTED',
+}
+
+export enum PremiumType {
+  ONE_MONTH = '1_MONTH',
+  THREE_MONTH = '3_MONTH',
+  SIX_MONTH = '6_MONTH',
+  TWELVE_MONTH = '12_MONTH',
+}
+
+export enum DeviceType {
+  MOBILE = 'MOBILE',
+  DESKTOP = 'DESKTOP',
+  TABLET = 'TABLET',
+  OTHER = 'OTHER',
+}
+
+export enum GenreSuggestionStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+}
+
+export enum FeedEventType {
+  NEW_PLAYLIST = 'NEW_PLAYLIST',
+  SONG_LIKED = 'SONG_LIKED',
+  ARTIST_FOLLOWED = 'ARTIST_FOLLOWED',
+  NEW_RELEASE = 'NEW_RELEASE',
+  UPCOMING_DROP = 'UPCOMING_DROP',
+  DROP_CANCELLED = 'DROP_CANCELLED',
+  DROP_RESCHEDULED = 'DROP_RESCHEDULED',
+}
+
+export enum ReportReason {
+  EXPLICIT = 'EXPLICIT',
+  COPYRIGHT = 'COPYRIGHT',
+  INAPPROPRIATE = 'INAPPROPRIATE',
+}
+
+export enum ReportStatus {
+  PENDING = 'PENDING',
+  DISMISSED = 'DISMISSED',
+  TAKEN_DOWN = 'TAKEN_DOWN',
+}
+
+export enum ContentTargetType {
+  SONG = 'SONG',
+  PLAYLIST = 'PLAYLIST',
+  ARTIST = 'ARTIST',
+  USER = 'USER',
+}

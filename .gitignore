@@ -1,1 +1,20 @@
-requirements_v3.docx
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+
+# Next.js
+.next/
+out/
+
+# TypeScript build output
+*.js.map
