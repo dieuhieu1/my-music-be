@@ -14,8 +14,9 @@
 | Validation | `class-validator`, `class-transformer` | DTO validation + auto-transform on all request bodies |
 | File upload | `multer`, `@types/multer` | Receive audio files and images before forwarding to MinIO |
 | Object storage | `minio` (Node.js SDK) | Upload files to MinIO, generate presigned URLs for streaming and download |
-| File type validation | `file-type` | Magic-byte MIME validation — rejects silently renamed files (BL-44) |
+| File type validation | `file-type` | Magic-byte MIME validation — rejects silently renamed files (BL-44, BL-88, BL-89) |
 | Audio duration | `music-metadata` | Parse audio duration server-side, enforce 20-min max (BL-44) |
+| Image processing | `sharp` | Center-crop and resize avatar uploads to 400×400 px (BL-88, BL-89) |
 | Encryption | Node.js built-in `crypto` | AES-256-CBC `.enc` file generation per song (BL-44, BL-53) |
 | Queue | `bullmq`, `@nestjs/bullmq` | All async jobs: email, audio extraction, drop notifications, genre tagging, recommendations, session cleanup |
 | Redis client | `ioredis` | Shared Redis connection for BullMQ + cache + rate limiting + JWT denylist |

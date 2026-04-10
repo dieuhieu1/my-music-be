@@ -52,8 +52,12 @@ apps/api/
         dto/
           update-profile.dto.ts
           change-password.dto.ts
+          onboarding.dto.ts
+          update-genres.dto.ts
         entities/
           user.entity.ts
+          user-genre-preference.entity.ts
+        ← POST /users/me/avatar handled directly in users.controller.ts (multer interceptor)
 
       artist-profile/
         artist-profile.module.ts
@@ -63,6 +67,7 @@ apps/api/
           update-artist-profile.dto.ts
         entities/
           artist-profile.entity.ts
+        ← POST /artists/me/avatar handled directly in artist-profile.controller.ts (multer interceptor)
 
       songs/
         songs.module.ts
@@ -71,11 +76,11 @@ apps/api/
         dto/
           upload-song.dto.ts
           update-song-metadata.dto.ts
+          play-event.dto.ts
           approve-song.dto.ts
         entities/
-          song.entity.ts
+          song.entity.ts            ← includes dropJob24hId, dropJob1hId (BullMQ job IDs for BL-64/BL-65 cancellation)
           song-encryption-key.entity.ts
-          song-daily-stats.entity.ts
 
       albums/
         albums.module.ts
@@ -108,7 +113,6 @@ apps/api/
         playback.service.ts
         dto/
           reorder-queue.dto.ts
-          record-play.dto.ts
         entities/
           queue-item.entity.ts
           play-history.entity.ts
@@ -207,6 +211,20 @@ apps/api/
           drop-cancelled.hbs
           song-approved.hbs
           song-rejected.hbs
+          song-reupload-required.hbs    ← BL-84
+          song-restored.hbs             ← BL-83
+          premium-revoked.hbs           ← BL-75
+          account-locked.hbs            ← BL-43
+          drop-rescheduled.hbs          ← BL-65
+
+      ai/
+        ai.module.ts
+        ai.controller.ts          ← POST /ai/chat (BL-35C)
+        ai-chat.service.ts        ← Anthropic SDK, 10-turn rolling window (Redis), skills dispatcher
+        skills.dispatcher.ts      ← maps tool_use block → internal NestJS services
+        dto/
+          chat.dto.ts             ← { message: string, sessionId?: string }
+        ← conversation history stored in Redis (no DB entity); key: ai:session:{userId}:{sessionId}
 
       storage/
         storage.module.ts
@@ -296,6 +314,7 @@ apps/web/
       (app)/
         layout.tsx                          ← PlayerBar + Sidebar + NotificationBell
         verify-email/page.tsx               ← A3
+        onboarding/page.tsx                 ← A8
 
         profile/
           page.tsx                          ← B1

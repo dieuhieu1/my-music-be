@@ -39,7 +39,7 @@ On 401: axios interceptor → `POST /auth/refresh` → retry original request (C
 ```
 
 ### Pagination
-All list endpoints accept `?page=1&limit=20` and return:
+All list endpoints accept `?page=1&size=20` and return:
 ```json
 {
   "success": true,
@@ -47,7 +47,7 @@ All list endpoints accept `?page=1&limit=20` and return:
     "items": [],
     "total": 142,
     "page": 1,
-    "limit": 20,
+    "size": 20,
     "totalPages": 8
   }
 }
@@ -102,7 +102,7 @@ SongSummary = {
   status       : SongStatus
   bpm          : number | null
   camelotKey   : string | null    // e.g. "8A", "5B"
-  listener     : number           // all-time play count
+  totalPlays   : number           // all-time play count (songs.total_plays)
   likeCount    : number
   dropAt       : string | null    // ISO 8601, SCHEDULED songs only
   artist       : ArtistSummary
@@ -155,6 +155,7 @@ PlaylistSummary = {
       "roles": ["USER"],
       "isPremium": false,
       "isEmailVerified": false,
+      "onboardingCompleted": false,  // always false on fresh registration
       "createdAt": "2026-04-05T10:00:00.000Z"
     }
   }
@@ -231,7 +232,8 @@ PlaylistSummary = {
       "isPremium": false,
       "premiumExpiryDate": null,
       "isEmailVerified": true,
-      "avatarUrl": null
+      "avatarUrl": null,
+      "onboardingCompleted": true   // false → client redirects to /onboarding
     },
     "session": {
       "id": "sess_xyz",
@@ -486,7 +488,7 @@ PlaylistSummary = {
 ---
 
 ### `PATCH /users/me`
-> Update name and/or avatar URL.
+> Update name and/or avatar URL (URL paste path — BL-66).
 
 **Access:** Authenticated
 
@@ -494,16 +496,102 @@ PlaylistSummary = {
 ```jsonc
 {
   "name": "Nguyen Van B",                           // string, 2–100 chars
-  "avatarUrl": "https://images.mymusic.app/..."     // string, valid URL
+  "avatarUrl": "https://images.example.com/me.jpg"  // string, https:// only
 }
 ```
 
-**Response `200`** — returns updated user object (same shape as `GET /users/me`)
+**Avatar URL validation (two steps, only when `avatarUrl` provided):**
+1. Regex: must match `^https://` — rejects `http://` and non-URLs
+2. HEAD check: server calls `HEAD {avatarUrl}` with 3s timeout; `Content-Type` must start with `image/`
+
+**Response `200`** — returns updated `UserResponse`
 
 **Errors**
 | Code | HTTP | When |
 |---|---|---|
-| `VALIDATION_ERROR` | 400 | name is empty or invalid URL |
+| `VALIDATION_ERROR` | 400 | name is empty |
+| `INVALID_AVATAR_URL` | 422 | HEAD check timed out, returned non-2xx, or `Content-Type` is not `image/*` |
+
+---
+
+### `POST /users/me/avatar`
+> Upload a profile picture file (file upload path — BL-88). Overwrites any existing avatar.
+
+**Access:** Authenticated
+
+**Request Body** — `multipart/form-data`
+| Field | Type | Rules |
+|---|---|---|
+| `file` | File | Magic-byte MIME ∈ `image/jpeg`, `image/png`, `image/webp`. `Content-Length` ≤ 5 MB (rejected before body is read). |
+
+**Processing:** center-crop → resize to 400×400 px (`sharp`) → stored at `images/avatar/users/{userId}.{ext}` in MinIO (overwrites previous).
+
+**Response `200`** — returns updated `UserResponse` with new `avatarUrl` set to the MinIO public path.
+
+**Errors**
+| Code | HTTP | When |
+|---|---|---|
+| `FILE_TOO_LARGE` | 413 | `Content-Length` > 5 MB |
+| `INVALID_FILE_TYPE` | 422 | Magic bytes not jpeg / png / webp |
+
+---
+
+### `POST /users/me/onboarding`
+> Submit or skip genre preferences after registration. Sets `onboardingCompleted=true`. Idempotent — calling again overwrites previous selection.
+
+**Access:** Authenticated
+
+**Request Body**
+```jsonc
+{
+  "genreIds": ["uuid-genre-1", "uuid-genre-2"],  // 1–10 confirmed genre IDs; ignored if skipped=true
+  "skipped": false                                // true → skip, genreIds ignored
+}
+```
+
+**Response `200`**
+```jsonc
+{
+  "success": true,
+  "data": {
+    "id": "a1b2c3d4-...",
+    "onboardingCompleted": true,
+    "preferredGenres": [
+      { "id": "uuid-genre-1", "name": "Lo-fi" },
+      { "id": "uuid-genre-2", "name": "Jazz" }
+    ]
+    // ... rest of UserResponse
+  }
+}
+```
+
+**Errors**
+| Code | HTTP | When |
+|---|---|---|
+| `GENRE_NOT_FOUND` | 404 | One or more genreIds not in confirmed genre list |
+| `VALIDATION_ERROR` | 400 | `skipped=false` and `genreIds` is empty or has >10 items |
+
+---
+
+### `PATCH /users/me/genres`
+> Update genre preferences from profile settings. Same write as onboarding but accessible any time after.
+
+**Access:** Authenticated
+
+**Request Body**
+```jsonc
+{
+  "genreIds": ["uuid-genre-1", "uuid-genre-3"]  // 1–10 confirmed genre IDs, replaces existing
+}
+```
+
+**Response `200`** — same shape as `POST /users/me/onboarding`
+
+**Errors**
+| Code | HTTP | When |
+|---|---|---|
+| `GENRE_NOT_FOUND` | 404 | One or more genreIds not in confirmed genre list |
+| `VALIDATION_ERROR` | 400 | genreIds empty or has >10 items |
 
 ---
 
@@ -671,7 +759,7 @@ PlaylistSummary = {
 ---
 
 ### `PATCH /artists/me/profile`
-> Edit own artist profile.
+> Edit own artist profile. Includes URL paste path for avatar (BL-67).
 
 **Access:** ARTIST only
 
@@ -680,14 +768,44 @@ PlaylistSummary = {
 {
   "stageName": "Lo-fi Dreams 2",    // string, 2–100 chars, non-empty if provided
   "bio": "Updated bio.",            // string, max 500 chars
-  "avatarUrl": "https://...",       // string, valid URL
+  "avatarUrl": "https://...",       // string, https:// only — same two-step validation as PATCH /users/me
   "socialLinks": [
     { "platform": "youtube", "url": "https://youtube.com/@lofi" }
   ]
 }
 ```
 
-**Response `200`** — returns updated artist profile
+**Avatar URL validation:** same two-step as `PATCH /users/me` — regex `^https://`, then HEAD check (3s timeout, `Content-Type: image/*`).
+
+**Response `200`** — returns updated `ArtistProfileResponse`
+
+**Errors**
+| Code | HTTP | When |
+|---|---|---|
+| `VALIDATION_ERROR` | 400 | stageName is empty |
+| `INVALID_AVATAR_URL` | 422 | HEAD check failed or non-image Content-Type |
+
+---
+
+### `POST /artists/me/avatar`
+> Upload a profile picture file for artist (file upload path — BL-89). Overwrites any existing avatar.
+
+**Access:** ARTIST only
+
+**Request Body** — `multipart/form-data`
+| Field | Type | Rules |
+|---|---|---|
+| `file` | File | Magic-byte MIME ∈ `image/jpeg`, `image/png`, `image/webp`. `Content-Length` ≤ 5 MB. |
+
+**Processing:** center-crop → 400×400 px (`sharp`) → stored at `images/avatar/artists/{artistId}.{ext}` in MinIO (overwrites previous).
+
+**Response `200`** — returns updated `ArtistProfileResponse`
+
+**Errors**
+| Code | HTTP | When |
+|---|---|---|
+| `FILE_TOO_LARGE` | 413 | `Content-Length` > 5 MB |
+| `INVALID_FILE_TYPE` | 422 | Magic bytes not jpeg / png / webp |
 
 ---
 
@@ -819,7 +937,7 @@ suggestedGenres string[]  no        new genre names to suggest (for admin approv
 | `limit` | number | 20 | Max 50 |
 | `genreId` | string | — | Filter by genre UUID |
 | `mood` | string | — | `happy\|sad\|focus\|chill\|workout` |
-| `sort` | string | `listener` | `listener\|createdAt\|likeCount` |
+| `sort` | string | `totalPlays` | `totalPlays\|createdAt\|likeCount` |
 | `order` | string | `DESC` | `ASC\|DESC` |
 
 **Response `200`** — paginated `SongSummary[]`
@@ -836,7 +954,7 @@ suggestedGenres string[]  no        new genre names to suggest (for admin approv
 |---|---|---|---|
 | `q` | string | yes | Search keyword |
 | `type` | string | no | `song\|album\|artist\|playlist` (default: all four) |
-| `filters` | string[] | no | e.g. `["listener>1000","name~Rock"]` — operators: `~` LIKE, `>` gt, `<` lt |
+| `filters` | string[] | no | e.g. `["totalPlays>1000","name~Rock"]` — operators: `~` LIKE, `>` gt, `<` lt |
 | `page` | number | no | — |
 | `limit` | number | no | Max 50 |
 
@@ -856,7 +974,7 @@ suggestedGenres string[]  no        new genre names to suggest (for admin approv
 ---
 
 ### `GET /songs/:songId`
-> Song detail. Dual-writes: increments `song.listener` AND upserts `SongDailyStats`.
+> Song detail. Read-only — does **not** increment `total_plays`. Use `POST /songs/:id/play` for play counting.
 
 **Access:** Authenticated (email verified)
 
@@ -874,7 +992,7 @@ suggestedGenres string[]  no        new genre names to suggest (for admin approv
     "status": "LIVE",
     "bpm": 85,
     "camelotKey": "9A",
-    "listener": 45201,
+    "totalPlays": 45201,
     "likeCount": 980,
     "dropAt": null,
     "isLikedByMe": true,
@@ -893,6 +1011,34 @@ suggestedGenres string[]  no        new genre names to suggest (for admin approv
 | Code | HTTP | When |
 |---|---|---|
 | `SONG_NOT_FOUND` | 404 | Song does not exist or is not accessible to caller |
+
+---
+
+### `POST /songs/:songId/play`
+> Report a completed play event. The single source of truth for `total_plays` and `playback_history` writes (BL-09, BL-29). Client fires this once per track on transition away (skip, natural end, or app close).
+
+**Access:** Authenticated (email verified)
+
+**Request Body**
+```jsonc
+{
+  "secondsPlayed": 47,   // number, required — seconds the user listened before leaving
+  "skipped": false       // boolean, required — true if user actively skipped
+}
+```
+
+**Server transaction (atomic):**
+- If `secondsPlayed >= 30`: `UPDATE songs SET total_plays = total_plays + 1` + `INSERT playback_history (skipped=false)`
+- Else: `INSERT playback_history (skipped=true)` only — `total_plays` unchanged
+- FIFO eviction: if user already has 500 rows in `playback_history`, delete oldest before insert
+
+**Response `204`** — No Content
+
+**Errors**
+| Code | HTTP | When |
+|---|---|---|
+| `SONG_NOT_FOUND` | 404 | Song does not exist |
+| `VALIDATION_ERROR` | 400 | Missing or invalid body fields |
 
 ---
 
@@ -1018,7 +1164,7 @@ genreIds     string[]  no
       "bpm": 83,
       "camelotKey": "9A",
       "energy": 60,
-      "listener": 12400,
+      "totalPlays": 12400,
       "likeCount": 340,
       "artist": { "id": "...", "stageName": "Lo-fi Dreams", "avatarUrl": "..." },
       "album": null,
@@ -1727,7 +1873,7 @@ genreIds     string[]  no
       { "id": "uuid", "name": "Lo-fi" },
       { "id": "uuid", "name": "K-Pop" }
     ],
-    "total": 38, "page": 1, "limit": 20, "totalPages": 2
+    "total": 38, "page": 1, "size": 20, "totalPages": 2
   }
 }
 ```
@@ -1872,7 +2018,7 @@ genreIds     string[]  no
         "createdAt": "2026-04-05T09:00:00.000Z"
       }
     ],
-    "total": 48, "page": 1, "limit": 20, "totalPages": 3
+    "total": 48, "page": 1, "size": 20, "totalPages": 3
   }
 }
 ```
@@ -1909,7 +2055,7 @@ genreIds     string[]  no
         "createdAt": "2026-04-05T08:00:00.000Z"
       }
     ],
-    "total": 10, "page": 1, "limit": 20, "totalPages": 1
+    "total": 10, "page": 1, "size": 20, "totalPages": 1
   }
 }
 ```
@@ -2124,7 +2270,7 @@ genreIds     string[]  no
         "downloadedAt": "2026-04-05T08:00:00.000Z"
       }
     ],
-    "total": 43, "page": 1, "limit": 20, "totalPages": 3
+    "total": 43, "page": 1, "size": 20, "totalPages": 3
   }
 }
 ```
@@ -2209,7 +2355,7 @@ genreIds     string[]  no
         "artist": { /* ArtistSummary */ }
       }
     ],
-    "total": 3, "page": 1, "limit": 20, "totalPages": 1
+    "total": 3, "page": 1, "size": 20, "totalPages": 1
   }
 }
 ```
@@ -2271,7 +2417,7 @@ genreIds     string[]  no
         "camelotKey": "9A"
       }
     ],
-    "total": 12, "page": 1, "limit": 20, "totalPages": 1
+    "total": 12, "page": 1, "size": 20, "totalPages": 1
   }
 }
 ```
@@ -2384,7 +2530,7 @@ genreIds     string[]  no
         "submittedAt": "2026-04-01T00:00:00.000Z"
       }
     ],
-    "total": 4, "page": 1, "limit": 20, "totalPages": 1
+    "total": 4, "page": 1, "size": 20, "totalPages": 1
   }
 }
 ```
@@ -2458,7 +2604,7 @@ genreIds     string[]  no
         "createdAt": "2026-01-01T00:00:00.000Z"
       }
     ],
-    "total": 1842, "page": 1, "limit": 20, "totalPages": 93
+    "total": 1842, "page": 1, "size": 20, "totalPages": 93
   }
 }
 ```
@@ -2622,7 +2768,7 @@ genreIds     string[]  no
         "createdAt": "2026-04-04T10:00:00.000Z"
       }
     ],
-    "total": 7, "page": 1, "limit": 20, "totalPages": 1
+    "total": 7, "page": 1, "size": 20, "totalPages": 1
   }
 }
 ```
@@ -2700,7 +2846,7 @@ genreIds     string[]  no
         "timestamp": "2026-04-05T10:00:00.000Z"
       }
     ],
-    "total": 340, "page": 1, "limit": 20, "totalPages": 17
+    "total": 340, "page": 1, "size": 20, "totalPages": 17
   }
 }
 ```
@@ -2740,7 +2886,7 @@ genreIds     string[]  no
         "createdAt": "2026-04-05T10:00:00.000Z"
       }
     ],
-    "total": 523, "page": 1, "limit": 20, "totalPages": 27
+    "total": 523, "page": 1, "size": 20, "totalPages": 27
   }
 }
 ```

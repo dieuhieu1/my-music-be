@@ -80,17 +80,18 @@ Upload ──► PENDING ──► APPROVED ──► LIVE ◄── TAKEN_DOWN 
 
 ## 3. Screen List
 
-### Area A — Authentication · 7 screens
+### Area A — Authentication · 8 screens
 
 | # | Screen | Access | Key Function | BL Codes |
 |---|---|---|---|---|
-| A1 | User Registration | Public | Enter name, email, password, confirm password. Assigns USER role. Sends 6-digit verification email (10-min expiry). Returns access + refresh tokens. | BL-01 |
+| A1 | User Registration | Public | Enter name, email, password, confirm password. Assigns USER role. Sends 6-digit verification email (10-min expiry). Returns access + refresh tokens (with `onboardingCompleted: false`). | BL-01 |
 | A2 | Artist Registration | Public | All A1 fields + stageName (required), bio (required), genres[] (min 1), socialLinks[] (optional). Creates User + ArtistProfile atomically in a single transaction. Sends verification email. | BL-46, BL-47 |
-| A3 | Email Verification | Authenticated (unverified) | Enter 6-digit code. Resend option available. On success: `is_email_verified=true`, all restricted features unlocked. | BL-78, BL-79 |
-| A4 | Login | Public | Email + password. Brute-force protection: 5 consecutive failures → account locked 15 min + email alert sent. Creates device session (30-day TTL from last activity). Returns access + refresh tokens. | BL-02, BL-42, BL-43 |
+| A3 | Email Verification | Authenticated (unverified) | Enter 6-digit code. Resend option available. On success: `is_email_verified=true`, all restricted features unlocked. `@SkipEmailVerified()` — middleware must whitelist this route. | BL-78, BL-79 |
+| A4 | Login | Public | Email + password. Brute-force protection: 5 consecutive failures → account locked 15 min + email alert sent. Creates device session (30-day TTL from last activity). Returns `TokenResponse` with `onboardingCompleted` flag. | BL-02, BL-42, BL-43 |
 | A5 | Forgot Password | Public | Enter email → server generates 6-digit code (10-min expiry), sends via SMTP asynchronously (non-blocking). | BL-06 |
 | A6 | Verify Reset Code | Public | Enter 6-digit code → server issues a reset JWT (15-min TTL). | BL-07 |
 | A7 | Reset Password | Public (with valid reset JWT) | Enter new password + confirm. Hash with bcrypt (rounds=10). Deletes all VerificationCodes and the ForgotPasswordToken for that email. | BL-08 |
+| A8 | Genre Onboarding | Authenticated (email-verified NOT required) | Shown after registration when `onboardingCompleted=false`. Grid of confirmed genres as selectable chips — min 1, max 10. **Submit** → `POST /users/me/onboarding` → redirect to `/browse`. **"Skip for now"** → same endpoint with `skipped: true` → redirect to `/browse`. Also accessible any time from Profile settings via `PATCH /users/me/genres` (BL-87). Route whitelisted from `EmailVerifiedGuard` via `@SkipEmailVerified()`. | BL-35A, BL-86, BL-87 |
 
 ---
 
@@ -134,9 +135,9 @@ Upload ──► PENDING ──► APPROVED ──► LIVE ◄── TAKEN_DOWN 
 
 | # | Screen | Access | Key Function | BL Codes |
 |---|---|---|---|---|
-| E1 | Home / Landing | Public + Authenticated | Featured SCHEDULED song teasers (carousel, links to I1), trending LIVE songs (by `listener` count), featured artists, featured playlists. Authenticated + verified users see a personalized recommendations section (BL-35). | BL-35, BL-09, BL-11 |
-| E2 | Browse / Discover | Authenticated (verified) | Paginated LIVE songs only. Filter by genre, mood. Per-song actions: play, like/unlike, save to playlist, **report** (`POST /reports` with type `EXPLICIT / COPYRIGHT / INAPPROPRIATE` and `targetType=SONG` — BL-38), download (PREMIUM only). Song `listener` counter increments on every `GET /songs/:id` (BL-09). | BL-09, BL-23, BL-24, BL-35, BL-36A, BL-36B, BL-38 |
-| E3 | Search Results | Authenticated (verified) | Search across **4 entity types**: songs (`LIVE` only), albums, artists, playlists. Filter format: `["name~Rock", "listener>1000"]` (operators: `~` LIKE, `>` gt, `<` lt, combined with AND). Paginated. | BL-23, BL-24 |
+| E1 | Home / Landing | Public + Authenticated | Featured SCHEDULED song teasers (carousel, links to I1), trending LIVE songs (ordered by `total_plays DESC`), featured artists, featured playlists. Authenticated + verified users see a personalized recommendations section (BL-35). | BL-35, BL-09, BL-11 |
+| E2 | Browse / Discover | Authenticated (verified) | Paginated LIVE songs only. Filter by genre, mood. Sort by `totalPlays`, `createdAt`, or `likeCount`. Per-song actions: play, like/unlike, save to playlist, **report** (BL-38), download (PREMIUM only). `songs.total_plays` increments only on `POST /songs/:id/play` with `secondsPlayed >= 30` — not on browse page load (BL-09). | BL-09, BL-23, BL-24, BL-35, BL-36A, BL-36B, BL-38 |
+| E3 | Search Results | Authenticated (verified) | Search across **4 entity types**: songs (`LIVE` only), albums, artists, playlists. Filter format: `["name~Rock", "totalPlays>1000"]` (operators: `~` LIKE, `>` gt, `<` lt, combined with AND). Paginated. | BL-23, BL-24 |
 | E4 | Genre Browsing | Authenticated | `GET /genres` — paginated list of confirmed genres (soft-deleted excluded). Click genre → filtered E2/E3 results by that genre. | BL-71 |
 | E5 | Report Content | Authenticated (verified, inline modal) | Triggered from E2, G2, C1, or H4 via a "Report" action. `POST /reports` with fields: `targetType` (SONG / PLAYLIST / ARTIST), `targetId`, `type` (EXPLICIT / COPYRIGHT / INAPPROPRIATE), optional `notes`. Creates `ContentReport` record for admin review (L4). | BL-38 |
 

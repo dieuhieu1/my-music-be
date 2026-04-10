@@ -143,7 +143,7 @@ Daily cron → RecommendationBatchWorker:
   For each user:
     liked_genres = genres from LikedSongs + followed artist genres
     songs = SELECT LIVE songs WHERE genre IN liked_genres
-            ORDER BY listener DESC LIMIT 50
+            ORDER BY total_plays DESC LIMIT 50
     UPSERT recommendation_cache(userId, songIds jsonb, computedAt=now)
 
 GET /recommendations:
@@ -174,7 +174,7 @@ GET /songs/:songId/next
   │    energy_dist = |candidate.energy - current.energy| / 100    (0–1)
   │    genre_bonus = candidate in user.topGenres ? -0.15 : 0
   │    decay_pen   = min(recommendCount * 0.05, 0.30)
-  │    pop_bonus   = log10(listener + 1) / 100
+  │    pop_bonus   = log10(totalPlays + 1) / 100
   │    score = (0.4 × bpm_dist) + (0.4 × key_dist) + (0.2 × energy_dist)
   │           + genre_bonus + decay_pen - pop_bonus
   │
@@ -200,7 +200,7 @@ Fallback (catalog exhaustion — pool < 5):
 | `bpm`, `camelotKey`, `energy` | `songs` | Audio distance calculation |
 | `genres[]` | `song_genres` | Genre preference matching |
 | Liked songs | `liked_songs` | Build user top-genre profile |
-| Play history | `song_daily_stats` | Layer 1 deduplication (7-day cooldown) |
+| Play history | `playback_history` | Layer 1 deduplication (7-day cooldown) + skip signals |
 | Session state | Redis (TTL 2h) | Layers 2 & 3 deduplication |
 | Decay counters | Redis (TTL 7d) | Layer 4 penalty |
 
@@ -330,7 +330,7 @@ Skills are NestJS services exposed to Claude as tools. Each skill maps 1:1 to an
       "bpm": "number",
       "camelotKey": "string",
       "duration": "number",
-      "listener": "number"
+      "totalPlays": "number"
     }
   ],
   "total": "number"
@@ -467,11 +467,12 @@ Skills are NestJS services exposed to Claude as tools. Each skill maps 1:1 to an
 
 **Description:** Summarize the user's listening patterns (top genres, peak hours, avg BPM preference).
 **When used:** User asks for a summary ("what do I usually listen to?", "what's my music taste?").
+**Data source:** `playback_history` — capped at 500 rows per user (BL-29). The `90d` window is not offered because it would be silently truncated for active users; `30d` is the reliable maximum.
 
 **Input Schema**
 ```json
 {
-  "timeRange": "7d | 30d | 90d (default 30d)"
+  "timeRange": "7d | 30d (default 30d)"
 }
 ```
 

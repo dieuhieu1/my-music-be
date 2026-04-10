@@ -78,6 +78,13 @@ app/
                                          ← NestJS: POST /auth/verify-email uses @SkipEmailVerified() decorator
                                          ← Middleware must whitelist this path from EmailVerifiedGuard redirect
 
+      onboarding/page.tsx            ← A8  Genre Onboarding
+                                         ← Auth required, email-verified NOT required
+                                         ← Uses @SkipEmailVerified() — user can pick genres before verifying email
+                                         ← Middleware must whitelist this path from EmailVerifiedGuard redirect
+                                         ← Client redirects here when TokenResponse.onboardingCompleted = false
+                                         ← On submit or skip → POST /users/me/onboarding → redirect to /browse
+
       profile/page.tsx               ← B1  My Profile
       profile/edit/page.tsx          ← B2  Edit User Profile
       profile/password/page.tsx      ← B3  Change Password
@@ -262,7 +269,7 @@ Cancellation (BL-63):
 Daily cron → enqueues RecommendationBatchJob:
   For each user:
     liked_genres = genres from LikedSongs + followed artists
-    songs = SELECT LIVE songs WHERE genre IN liked_genres ORDER BY listener DESC LIMIT 50
+    songs = SELECT LIVE songs WHERE genre IN liked_genres ORDER BY total_plays DESC LIMIT 50
     UPSERT recommendation_cache (userId, songIds jsonb, computedAt=now)
     -- songIds stored as PostgreSQL jsonb array: ["uuid1", "uuid2", ...]
 
@@ -334,11 +341,15 @@ CREATE INDEX idx_songs_status_dropat ON songs(status, drop_at);
 -- Download quota check performance (BL-54)
 CREATE INDEX idx_download_records_user ON download_records(user_id, revoked_at);
 
--- BL-09 upsert — must be unique for ON CONFLICT
-CREATE UNIQUE INDEX idx_song_daily_stats ON song_daily_stats(song_id, date);
-
 -- Notification inbox pagination (BL-80)
 CREATE INDEX idx_notifications_user ON notifications(user_id, created_at DESC);
+
+-- Playback history queries — recommendation engine + artist analytics (BL-29, BL-35, BL-51)
+CREATE INDEX idx_playback_history_user ON playback_history(user_id, played_at DESC);
+CREATE INDEX idx_playback_history_song ON playback_history(song_id, played_at DESC);
+
+-- Onboarding genre preferences lookup (BL-86, BL-87, BL-35A)
+CREATE INDEX idx_user_genre_pref ON user_genre_preferences(user_id);
 ```
 
 ### Redis Key Namespaces
@@ -363,4 +374,4 @@ throttle:{ip}:{route}  → sliding window counter (BL-41 rate limiting)
 |---|---|---|
 | `audio` | `{songId}.mp3` (128 kbps), `{songId}-hq.mp3` (320 kbps) | Private — NestJS presigned URL, TTL 1h |
 | `audio-enc` | `{songId}.enc` (AES-256 per-song key) | Private — NestJS presigned URL, TTL 5 min (BL-53) |
-| `images` | `song/{id}.jpg`, `album/{id}.jpg`, `playlist/{id}.jpg`, `avatar/{id}.jpg` | Public read — direct URL in API responses |
+| `images` | `song/{id}.jpg`, `album/{id}.jpg`, `playlist/{id}.jpg`, `avatar/users/{userId}.{ext}`, `avatar/artists/{artistId}.{ext}` | Public read — direct URL in API responses |

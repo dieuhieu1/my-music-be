@@ -21,7 +21,7 @@ songs
 ├── bpm              integer | null  ← extracted by librosa beat_track()
 ├── camelot_key      varchar | null  ← extracted by librosa chroma_cqt() + mapping
 ├── energy           integer | null  ← 0–100, extracted by librosa RMS + spectral centroid
-└── listener         integer         ← all-time play count, used as tiebreaker
+└── total_plays      integer         ← all-time play count (BL-09), used as tiebreaker
 ```
 
 > `bpm`, `camelot_key`, `energy` are `null` only when DSP extraction failed. Those songs are excluded from candidate pool automatically.
@@ -31,7 +31,7 @@ songs
 ```
 song_genres        (song_id, genre_id)   ← genre matching
 liked_songs        (user_id, song_id)    ← build user taste profile
-song_daily_stats   (user_id, song_id, date, play_count)  ← Layer 1 deduplication
+playback_history   (user_id, song_id, played_at, skipped) ← Layer 1 deduplication
 ```
 
 ### 1.3 Redis keys (new — created by this feature)
@@ -209,7 +209,7 @@ private scoreCandidate(
 
   // ── Adjustment 3: Popularity tiebreaker ────────────────────────────────
   // log-normalised so mega-hits don't always dominate
-  const popularityBonus = Math.log10(candidate.listener + 1) / 100;
+  const popularityBonus = Math.log10(candidate.totalPlays + 1) / 100;
 
   const finalScore = baseDist - genreBonus + decayPenalty - popularityBonus;
 
@@ -461,7 +461,7 @@ export interface SongFeatures {
   bpm:         number;
   camelotKey:  string;
   energy:      number;
-  listener:    number;
+  totalPlays:  number;
   genres:      { id: string }[];
 }
 
@@ -611,7 +611,7 @@ export class NextSongService {
     const baseDist      = audioDistance(current, candidate);
     const genreBonus    = candidate.genres.some(g => profile.topGenreIds.includes(g.id)) ? 0.15 : 0;
     const decayPenalty  = Math.min((decayCounts.get(candidate.id) ?? 0) * 0.05, 0.30);
-    const popBonus      = Math.log10(candidate.listener + 1) / 100;
+    const popBonus      = Math.log10(candidate.totalPlays + 1) / 100;
     return baseDist - genreBonus + decayPenalty - popBonus;
   }
 

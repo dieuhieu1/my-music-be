@@ -8,8 +8,8 @@ Each module owns its controllers, services, and TypeORM repositories. Cross-modu
 ```
 src/modules/
   auth/              ← BL-01–08, BL-41–43, BL-78–79
-  users/             ← BL-66, BL-72–73, BL-32
-  artist-profile/    ← BL-46–47, BL-67, BL-11
+  users/             ← BL-66, BL-72–73, BL-32, BL-86, BL-87, BL-88
+  artist-profile/    ← BL-46–47, BL-67, BL-11, BL-89
   songs/             ← BL-09, BL-37, BL-44, BL-48–49, BL-83–85
   albums/            ← BL-10, BL-14, BL-18
   playlists/         ← BL-12–13, BL-15–17, BL-22
@@ -25,6 +25,7 @@ src/modules/
   analytics/         ← BL-51
   admin/             ← BL-37, BL-40, BL-68–71, BL-74–75, BL-83–84
   audit/             ← BL-40
+  ai/                ← AI chat agent (BL-35C–35F), skills dispatcher, conversation history (Redis)
   mail/              ← Email templates (Section 14 of requirements)
   storage/           ← MinIO abstraction: upload, presigned URL, delete
   queue/             ← BullMQ queue/worker definitions

@@ -161,7 +161,7 @@ Hệ thống có ba vai trò. `PREMIUM` là cấp độ thanh toán, chồng lê
 
 | Mã | Tên | Mô tả |
 |---|---|---|
-| BL-09 | Bộ đếm lượt nghe bài nhạc | Mỗi `GET /songs/:id` tăng `song.listener` lên 1. |
+| BL-09 | Bộ đếm lượt nghe bài nhạc | `POST /songs/:id/play` là nguồn duy nhất tăng `songs.total_plays`. Chỉ tăng khi `secondsPlayed >= 30` (giao dịch nguyên tử). `GET /songs/:id` chỉ đọc — không tăng bộ đếm. Trường `song.listener` cũ đã bị xóa hoàn toàn và thay bằng `total_plays`. |
 | BL-10 | Bộ đếm lượt theo dõi album | Mỗi `GET /albums/:id` tăng `album.follower` lên 1. |
 | BL-11 | Bộ đếm lượt theo dõi nghệ sĩ | Mỗi `GET /artists/:id` tăng `artist.follower` lên 1. |
 | BL-12 | Bộ đếm playlist | Mỗi `GET /playlists/:id` tăng cả `playlist.follower` và `playlist.listener` lên 1. |
@@ -207,10 +207,10 @@ Hệ thống có ba vai trò. `PREMIUM` là cấp độ thanh toán, chồng lê
 | Mã | Tên | Mô tả |
 |---|---|---|
 | BL-28 | Cấp chất lượng âm thanh | Tiêu chuẩn 128 kbps cho người không premium. Cao 320 kbps cho người dùng PREMIUM. Hạ cấp ở yêu cầu track tiếp theo nếu premium hết hạn giữa phiên. |
-| BL-29 | Lịch sử phát lại | Ghi bản ghi `PlaybackHistory` (`userId`, `songId`, `playedAt`, `skipped: boolean`) khi người dùng nghe quá 30 giây. Lượt nghe < 10 giây được ghi là `skipped=true`. Giới hạn 200 mục mỗi người dùng. |
+| BL-29 | Lịch sử phát lại | `POST /songs/:id/play` body: `{ secondsPlayed: number, skipped?: boolean }`. Trong **một giao dịch nguyên tử**: (1) chèn bản ghi `playback_history(userId, songId, playedAt, skipped)`; (2) nếu `secondsPlayed >= 30` → tăng `songs.total_plays` bằng câu SQL `UPDATE songs SET total_plays = total_plays + 1`; (3) nếu tổng số hàng của người dùng vượt **500** → xóa bản ghi cũ nhất (FIFO theo `playedAt`). Giới hạn 500 hàng/người dùng. Trả về 204 No Content. Client gọi endpoint này một lần khi chuyển bài. |
 | BL-30 | Tiếp tục phát lại | Lưu `positionSeconds` cuối cùng theo người dùng theo bài trong bảng `PlaybackState`. Khi mở app, trả về bài nhạc cuối + vị trí cho lời nhắc 'Tiếp tục nghe'. |
 | BL-31 | Quản lý hàng đợi | Hàng đợi phát nhạc phía server mỗi người dùng. Endpoint: thêm, xóa, sắp xếp lại, xóa hết. Hỗ trợ chế độ shuffle. Khi đăng xuất: **xóa cứng** toàn bộ hàng đợi của người dùng đó (không xóa mềm — hàng đợi mất vĩnh viễn). Khi đăng nhập lại, hàng đợi bắt đầu trống; hàng đợi mới được tạo tự động khi người dùng bắt đầu phát bài nhạc. |
-| BL-51 | Thống kê nghệ sĩ | `GET /artist/me/analytics` — chỉ vai trò ARTIST. Trả về số lượt phát theo bài, số lượt thích, số người theo dõi, top 5 bài theo lượt phát trong 30 ngày qua. Admin truy cập bất kỳ nghệ sĩ qua `GET /admin/artists/:id/analytics`. |
+| BL-51 | Thống kê nghệ sĩ | `GET /artist/me/analytics` — chỉ vai trò ARTIST. Trả về: `total_plays` theo bài (từ `songs.total_plays`), số lượt thích, số người theo dõi, top 5 bài theo `total_plays` trong 30 ngày qua (đọc từ `playback_history WHERE playedAt >= now - 30d`). Admin truy cập bất kỳ nghệ sĩ qua `GET /admin/artists/:id/analytics`. |
 
 ---
 
@@ -242,9 +242,9 @@ Hệ thống có ba vai trò. `PREMIUM` là cấp độ thanh toán, chồng lê
 
 | Mã | Tên | Mô tả |
 |---|---|---|
-| BL-35 | Gợi ý dựa trên quy tắc | Gợi ý bài LIVE từ thể loại nghe nhiều nhất trong 30 ngày qua. Fallback sang bài LIVE được nghe nhiều nhất toàn cầu nếu dữ liệu thưa. Tính lại hàng ngày. |
-| BL-35A | Chiến lược cold start | Người dùng mới với < 5 lượt nghe không bỏ qua: nhắc chọn thể loại ưa thích khi onboarding. Dùng lựa chọn để tạo gợi ý ban đầu. |
-| BL-35B | Vòng phản hồi bỏ qua | Các lượt phát có `skipped=true` (< 10 giây) là tín hiệu tiêu cực. Giảm trọng số bài/nghệ sĩ/thể loại bị bỏ qua. Trọng số bỏ qua giảm dần về trung lập sau 90 ngày. |
+| BL-35 | Gợi ý dựa trên quy tắc | Gợi ý bài LIVE từ thể loại nghe nhiều nhất. Nguồn dữ liệu: bảng `playback_history` (giới hạn 500 hàng, cửa sổ `7d` hoặc `30d`, mặc định `30d`). Fallback sang bài LIVE có `total_plays` cao nhất toàn cầu nếu người dùng có < 5 lượt nghe không bỏ qua trong cửa sổ. Tính lại hàng ngày qua `RecommendationBatchWorker`. |
+| BL-35A | Chiến lược cold start & Onboarding | Người dùng mới (< 5 lượt nghe trong `playback_history`) được điều hướng đến `/onboarding` ngay sau khi đăng nhập lần đầu. Flag `onboardingCompleted: boolean` trong `TokenResponse` điều khiển luồng này ở frontend. Trang `/onboarding` có decorator `@SkipEmailVerified()` — người dùng chưa xác minh email vẫn có thể hoàn tất. Hai endpoint: `POST /users/me/onboarding` (ghi `user_genre_preferences`, đặt `onboardingCompleted=true`, chấp nhận `skipped: true`) và `PATCH /users/me/genres` (cập nhật sở thích sau này). Dữ liệu thể loại đã chọn được đưa vào gợi ý ban đầu ngay lập tức. |
+| BL-35B | Vòng phản hồi bỏ qua | Tín hiệu bỏ qua ghi qua `PATCH /playback/skip` body `{ songId, positionSeconds }`. Ghi `skipped=true` vào `playback_history`. Các lượt phát có `skipped=true` là tín hiệu tiêu cực — giảm trọng số bài/nghệ sĩ/thể loại trong bộ máy gợi ý. Trọng số bỏ qua giảm dần về trung lập sau 90 ngày. |
 
 ### 7.2 Gợi Ý Theo Tâm Trạng
 
