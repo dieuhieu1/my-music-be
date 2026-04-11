@@ -1,9 +1,15 @@
 node_modules
+**/node_modules
 dist
+**/dist
 .git
 .env
 *.log
-apps/web
+# Web: exclude build output and local caches, but keep source files
+apps/web/.next
+apps/web/out
+# DSP: exclude Python virtual environments
 apps/dsp/.venv
 apps/dsp/venv
 **/__pycache__
+**/*.pyc

@@ -19,17 +19,16 @@ export enum SongStatus {
 }
 
 export enum NotificationType {
-  DROP_UPCOMING = 'DROP_UPCOMING',
-  DROP_FIRED = 'DROP_FIRED',
-  DROP_CANCELLED = 'DROP_CANCELLED',
-  DROP_RESCHEDULED = 'DROP_RESCHEDULED',
   SONG_APPROVED = 'SONG_APPROVED',
   SONG_REJECTED = 'SONG_REJECTED',
   SONG_REUPLOAD_REQUIRED = 'SONG_REUPLOAD_REQUIRED',
   SONG_RESTORED = 'SONG_RESTORED',
   PREMIUM_ACTIVATED = 'PREMIUM_ACTIVATED',
   PREMIUM_REVOKED = 'PREMIUM_REVOKED',
-  NEW_RELEASE = 'NEW_RELEASE',
+  UPCOMING_DROP = 'UPCOMING_DROP',      // BL-61: 24h / 1h before drop
+  NEW_RELEASE = 'NEW_RELEASE',          // BL-64: drop fired
+  DROP_CANCELLED = 'DROP_CANCELLED',
+  DROP_RESCHEDULED = 'DROP_RESCHEDULED',
 }
 
 export enum PaymentProvider {
@@ -85,7 +84,7 @@ export enum ReportReason {
 export enum ReportStatus {
   PENDING = 'PENDING',
   DISMISSED = 'DISMISSED',
-  TAKEN_DOWN = 'TAKEN_DOWN',
+  RESOLVED = 'RESOLVED',  // report acted on — song taken down (L4)
 }
 
 export enum ContentTargetType {

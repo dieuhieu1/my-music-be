@@ -13,8 +13,8 @@ export const databaseConfig = registerAs(
     database: process.env.DB_NAME || 'mymusic_db',
     // Entities are registered per-module via TypeOrmModule.forFeature()
     autoLoadEntities: true,
-    // Always false — use migrations for schema changes
-    synchronize: false,
+    // Auto-create tables from entities in development (use migrations in production)
+    synchronize: process.env.NODE_ENV !== 'production',
     logging: process.env.NODE_ENV === 'development',
     migrations: [join(__dirname, '..', 'database', 'migrations', '*.{ts,js}')],
     migrationsRun: false,

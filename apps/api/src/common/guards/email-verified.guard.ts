@@ -32,7 +32,7 @@ export class EmailVerifiedGuard implements CanActivate {
     if (skipEmailVerified) return true;
 
     const { user } = context.switchToHttp().getRequest();
-    if (!user?.is_email_verified) {
+    if (!user?.isEmailVerified) {
       throw new ForbiddenException('EMAIL_NOT_VERIFIED');
     }
     return true;

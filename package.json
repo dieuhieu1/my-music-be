@@ -5,12 +5,25 @@
   "workspaces": [
     "apps/api",
     "apps/web",
-    "packages/*"
+    "packages/*",
+    "tests"
   ],
   "scripts": {
     "api:dev": "npm run start:dev --workspace=apps/api",
     "api:build": "npm run build --workspace=apps/api",
     "web:dev": "npm run dev --workspace=apps/web",
-    "types:build": "npm run build --workspace=packages/types"
+    "types:build": "npm run build --workspace=packages/types",
+    "test:api": "npm run test:api --workspace=tests",
+    "test:e2e": "npm run test:e2e --workspace=tests",
+    "test:phase1": "npm run test:api:phase1 --workspace=tests && npm run test:e2e:phase1 --workspace=tests",
+    "test:phase2": "npm run test:api:phase2 --workspace=tests && npm run test:e2e:phase2 --workspace=tests",
+    "test:phase3": "npm run test:api:phase3 --workspace=tests && npm run test:e2e:phase3 --workspace=tests",
+    "test:phase4a": "npm run test:api:phase4a --workspace=tests && npm run test:e2e:phase4a --workspace=tests",
+    "test:phase4b": "npm run test:api:phase4b --workspace=tests && npm run test:e2e:phase4b --workspace=tests",
+    "test:phase5": "npm run test:api:phase5 --workspace=tests && npm run test:e2e:phase5 --workspace=tests",
+    "test:phase6": "npm run test:api:phase6 --workspace=tests && npm run test:e2e:phase6 --workspace=tests",
+    "test:phase7": "npm run test:api:phase7 --workspace=tests && npm run test:e2e:phase7 --workspace=tests",
+    "test:phase8": "npm run test:api:phase8 --workspace=tests && npm run test:e2e:phase8 --workspace=tests",
+    "test:phase9": "npm run test:api:phase9 --workspace=tests && npm run test:e2e:phase9 --workspace=tests"
   }
 }

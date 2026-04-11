@@ -24,7 +24,11 @@ services:
     networks:
       - mymusic-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-mymusic} -d ${DB_NAME:-mymusic_db}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-mymusic} -d ${DB_NAME:-mymusic_db}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,8 +67,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin123}
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # Web console → http://localhost:9001
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console → http://localhost:9001
     volumes:
       - minio_data:/data
     networks:
@@ -82,8 +86,8 @@ services:
     container_name: mymusic-mailhog
     restart: unless-stopped
     ports:
-      - "1025:1025"   # SMTP
-      - "8025:8025"   # Web UI → http://localhost:8025
+      - "1025:1025" # SMTP
+      - "8025:8025" # Web UI → http://localhost:8025
     networks:
       - mymusic-net
 
@@ -101,7 +105,11 @@ services:
       DB_HOST: postgres
       REDIS_HOST: redis
       MINIO_ENDPOINT: minio
-      SMTP_HOST: mailhog
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: dieuhieu10h@gmail.com
+      SMTP_PASS: wrzubasciskeqprk
+      SMTP_FROM: dieuhieu10h@gmail.com
       DSP_URL: http://dsp:5000
     ports:
       - "3001:3001"
@@ -116,6 +124,27 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+    networks:
+      - mymusic-net
+
+  # ── Next.js Web App ───────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    container_name: mymusic-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web/src:/app/apps/web/src
+      - ./apps/web/messages:/app/apps/web/messages
+      - ./packages:/app/packages
+    depends_on:
+      - api
     networks:
       - mymusic-net
 

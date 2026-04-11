@@ -1,0 +1,104 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "submit": "Submit",
+    "back": "Back",
+    "next": "Next",
+    "search": "Search",
+    "follow": "Follow",
+    "unfollow": "Unfollow",
+    "play": "Play",
+    "pause": "Pause",
+    "like": "Like",
+    "unlike": "Unlike",
+    "report": "Report",
+    "download": "Download"
+  },
+  "nav": {
+    "browse": "Browse",
+    "playlists": "Playlists",
+    "likedSongs": "Liked Songs",
+    "savedPlaylists": "Saved Playlists",
+    "feed": "Activity Feed",
+    "profile": "Profile",
+    "settings": "Settings",
+    "logout": "Log out",
+    "admin": "Admin"
+  },
+  "auth": {
+    "login": "Sign in",
+    "register": "Create account",
+    "logout": "Log out",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "name": "Full name",
+    "forgotPassword": "Forgot password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "registerUser": "Register as listener",
+    "registerArtist": "Register as artist",
+    "stageName": "Stage name",
+    "bio": "Bio",
+    "verifyEmail": "Verify email",
+    "verificationCode": "6-digit code",
+    "resendCode": "Resend code",
+    "resetPassword": "Reset password",
+    "newPassword": "New password"
+  },
+  "song": {
+    "upload": "Upload song",
+    "title": "Title",
+    "genre": "Genre",
+    "album": "Album",
+    "duration": "Duration",
+    "status": {
+      "PENDING": "Pending review",
+      "APPROVED": "Approved",
+      "SCHEDULED": "Scheduled",
+      "LIVE": "Live",
+      "REJECTED": "Rejected",
+      "REUPLOAD_REQUIRED": "Changes requested",
+      "TAKEN_DOWN": "Taken down"
+    }
+  },
+  "player": {
+    "nowPlaying": "Now playing",
+    "queue": "Queue",
+    "smartOrder": "Smart Order",
+    "shuffle": "Shuffle",
+    "noSong": "No song playing"
+  },
+  "premium": {
+    "title": "Premium",
+    "upgrade": "Upgrade to Premium",
+    "active": "Premium active",
+    "expired": "Premium expired",
+    "unlimited": "Unlimited",
+    "downloadsUsed": "{used} / {quota} downloads",
+    "plans": {
+      "1_MONTH": "1 month",
+      "3_MONTH": "3 months",
+      "6_MONTH": "6 months",
+      "12_MONTH": "12 months"
+    }
+  },
+  "notification": {
+    "title": "Notifications",
+    "markAllRead": "Mark all as read",
+    "empty": "No notifications"
+  },
+  "admin": {
+    "dashboard": "Dashboard",
+    "users": "Users",
+    "songs": "Song queue",
+    "genres": "Genres",
+    "reports": "Reports",
+    "auditLog": "Audit log",
+    "payments": "Payments"
+  }
+}

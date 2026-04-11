@@ -17,23 +17,26 @@ import { throttlerConfig } from './config/throttler.config';
 import { HealthModule } from './modules/health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { QueueModule } from './modules/queue/queue.module';
+import { MailModule } from './modules/mail/mail.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
   imports: [
-    // ── Config (global — available everywhere via ConfigService) ──────────
+    // ── Config (global) ────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, redisConfig, minioConfig, jwtConfig, throttlerConfig],
       envFilePath: '.env',
     }),
 
-    // ── Database ──────────────────────────────────────────────────────────
+    // ── Database ───────────────────────────────────────────────────────────
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => config.get('database'),
     }),
 
-    // ── BullMQ (async job queues) ─────────────────────────────────────────
+    // ── BullMQ ─────────────────────────────────────────────────────────────
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -45,7 +48,7 @@ import { QueueModule } from './modules/queue/queue.module';
       }),
     }),
 
-    // ── Rate limiting (Redis-backed, 200 req/min default) ─────────────────
+    // ── Rate limiting (Redis-backed) ───────────────────────────────────────
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -66,23 +69,25 @@ import { QueueModule } from './modules/queue/queue.module';
       }),
     }),
 
-    // ── Cron jobs ─────────────────────────────────────────────────────────
+    // ── Cron jobs ──────────────────────────────────────────────────────────
     ScheduleModule.forRoot(),
 
-    // ── Feature modules ───────────────────────────────────────────────────
+    // ── Infrastructure modules ─────────────────────────────────────────────
     HealthModule,
     StorageModule,
     QueueModule,
+    MailModule,
 
-    // Phase 2+: AuthModule, UsersModule, ArtistProfileModule, MailModule ...
+    // ── Phase 2: Auth ──────────────────────────────────────────────────────
+    AuthModule,
+
+    // Phase 3+: UsersModule, ArtistProfileModule, SongsModule, ...
   ],
   providers: [
-    // Global rate limiting guard (general 200/min — auth/upload routes
-    // override this with @SkipThrottle() + their own @Throttle() in Phase 2)
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
+    // Global rate limiting
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Global JWT auth — @Public() decorator bypasses this
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule {}

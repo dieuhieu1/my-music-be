@@ -34,7 +34,7 @@ CREATE TYPE song_status_enum AS ENUM (
 );
 
 CREATE TYPE report_reason_enum  AS ENUM ('EXPLICIT', 'COPYRIGHT', 'INAPPROPRIATE');
-CREATE TYPE report_status_enum  AS ENUM ('PENDING', 'DISMISSED', 'TAKEN_DOWN');
+CREATE TYPE report_status_enum  AS ENUM ('PENDING', 'DISMISSED', 'RESOLVED');  -- RESOLVED: report acted on (song taken down)
 CREATE TYPE content_target_type_enum AS ENUM ('SONG', 'PLAYLIST', 'ARTIST', 'USER');
 
 CREATE TYPE feed_event_type_enum AS ENUM (
@@ -53,16 +53,19 @@ CREATE TYPE premium_type_enum             AS ENUM ('1_MONTH', '3_MONTH', '6_MONT
 CREATE TYPE payment_status_enum           AS ENUM ('PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'ADMIN_GRANTED');
 CREATE TYPE payment_provider_enum         AS ENUM ('VNPAY', 'MOMO', 'ADMIN');  -- BL-20/21, BL-76/77, BL-74
 
--- In-app notification types (BL-64, BL-74, BL-75, BL-80–82, BL-84, BL-83)
+-- In-app notification types (BL-64, BL-74, BL-75, BL-80–82, BL-83, BL-84)
+-- 10 types per spec H3 — names match the enum values in the spec exactly
 CREATE TYPE notification_type_enum AS ENUM (
-    'DROP_UPCOMING',          -- BL-61: 24h / 1h before drop
-    'DROP_FIRED',             -- BL-64: at drop time
-    'DROP_CANCELLED',         -- BL-63
-    'DROP_RESCHEDULED',       -- BL-65
+    'SONG_APPROVED',          -- BL-37: admin approved, song goes LIVE
+    'SONG_REJECTED',          -- BL-37: admin permanently rejected
+    'SONG_REUPLOAD_REQUIRED', -- BL-84: admin requests changes with notes
+    'SONG_RESTORED',          -- BL-83: admin restored TAKEN_DOWN song to LIVE
     'PREMIUM_ACTIVATED',      -- BL-21, BL-77, BL-74
-    'PREMIUM_REVOKED',        -- BL-75
-    'SONG_REUPLOAD_REQUIRED', -- BL-84
-    'SONG_RESTORED'           -- BL-83
+    'PREMIUM_REVOKED',        -- BL-75: lapsed or manually revoked by admin
+    'UPCOMING_DROP',          -- BL-61: 24h / 1h before scheduled drop
+    'NEW_RELEASE',            -- BL-64: song drop fired (dropAt reached)
+    'DROP_CANCELLED',         -- BL-63
+    'DROP_RESCHEDULED'        -- BL-65
 );
 
 
@@ -91,10 +94,11 @@ CREATE TABLE users (
     failed_attempts     SMALLINT        NOT NULL DEFAULT 0,
     lock_until          TIMESTAMP WITH TIME ZONE,
 
-    -- Crossfade preference (BL-37B) — 0–12 sec, default 3
-    crossfade_seconds   SMALLINT        NOT NULL DEFAULT 3
-        CHECK (crossfade_seconds BETWEEN 0 AND 12),
+    -- Social counters (B1, H4) — maintained by application on follow/unfollow
+    follower_count      INTEGER         NOT NULL DEFAULT 0,
+    following_count     INTEGER         NOT NULL DEFAULT 0,
 
+    -- BL-37B (crossfade) removed — sequential playback only per spec F1
     created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     updated_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
     deleted_at  TIMESTAMP WITH TIME ZONE NULL DEFAULT NULL
@@ -234,6 +238,7 @@ CREATE TABLE artist_profiles (
     stage_name      VARCHAR(150) NOT NULL,
     bio             TEXT         NOT NULL,
     follower_count  INTEGER      NOT NULL DEFAULT 0,
+    listener_count  INTEGER      NOT NULL DEFAULT 0,  -- BL-11: increments on every GET /artists/:id
     avatar_url      VARCHAR(500),
     social_links    JSONB        NOT NULL DEFAULT '[]',  -- [{url, label}]
     created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -305,7 +310,8 @@ CREATE TABLE albums (
     -- RESTRICT: BL-19 — deleting an artist must not cascade-delete albums
     description     TEXT,
     release_year    SMALLINT,
-    follower_count  INTEGER       NOT NULL DEFAULT 0,      -- BL-10
+    follower_count  INTEGER       NOT NULL DEFAULT 0,      -- BL-10: explicit follow action
+    listener_count  INTEGER       NOT NULL DEFAULT 0,      -- BL-10: increments on every GET /albums/:id
     total_tracks    SMALLINT      NOT NULL DEFAULT 0,      -- BL-14 denormalized
     total_hours     NUMERIC(6,2)  NOT NULL DEFAULT 0.00,   -- BL-14 in hours
     created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
@@ -369,6 +375,23 @@ CREATE INDEX idx_songs_status      ON songs (status)      WHERE deleted_at IS NU
 CREATE INDEX idx_songs_uploader_id ON songs (uploader_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_songs_album_id    ON songs (album_id)    WHERE deleted_at IS NULL AND album_id IS NOT NULL;
 CREATE INDEX idx_songs_title_trgm  ON songs USING gin (title gin_trgm_ops);  -- BL-23
+
+
+-- ----------------------------------------------------------------
+-- song_daily_stats  (BL-51, D3 Song Analytics)
+-- Upserted on every GET /songs/:id alongside song.listener_count.
+-- Rows kept indefinitely; analytics queries sum last 30 days.
+-- ----------------------------------------------------------------
+CREATE TABLE song_daily_stats (
+    song_id    UUID    NOT NULL REFERENCES songs(id) ON DELETE CASCADE,
+    date       DATE    NOT NULL,
+    play_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (song_id, date)
+);
+
+CREATE INDEX idx_song_daily_stats_song_date ON song_daily_stats (song_id, date DESC);
+-- Analytics range scan: last 30 days across all songs for an artist
+CREATE INDEX idx_song_daily_stats_date ON song_daily_stats (date DESC);
 
 
 -- ----------------------------------------------------------------
