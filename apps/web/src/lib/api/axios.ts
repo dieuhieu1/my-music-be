@@ -51,7 +51,12 @@ apiClient.interceptors.response.use(
         processQueue(refreshError);
         // Refresh failed — clear client state and redirect to login
         if (typeof window !== 'undefined') {
-          window.location.href = '/login';
+          const isAuthPage = /\/(login|register|forgot-password|reset-password|verify-email)(\/|$)/.test(
+            window.location.pathname
+          );
+          if (!isAuthPage) {
+            window.location.href = '/login';
+          }
         }
         return Promise.reject(refreshError);
       } finally {

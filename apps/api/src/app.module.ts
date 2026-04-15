@@ -19,6 +19,8 @@ import { StorageModule } from './modules/storage/storage.module';
 import { QueueModule } from './modules/queue/queue.module';
 import { MailModule } from './modules/mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
+import { ArtistProfileModule } from './modules/artist-profile/artist-profile.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -81,7 +83,11 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     // ── Phase 2: Auth ──────────────────────────────────────────────────────
     AuthModule,
 
-    // Phase 3+: UsersModule, ArtistProfileModule, SongsModule, ...
+    // ── Phase 3: User & Artist Profiles ───────────────────────────────────
+    UsersModule,
+    ArtistProfileModule,
+
+    // Phase 4+: SongsModule, AlbumsModule, ...
   ],
   providers: [
     // Global rate limiting

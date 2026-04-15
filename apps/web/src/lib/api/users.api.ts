@@ -1,17 +1,45 @@
 import apiClient from './axios';
 
-export const usersApi = {
-  getMe: () =>
-    apiClient.get('/users/me'),
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+  roles: string[];
+  followerCount: number;
+  followingCount: number;
+  isPremium: boolean;
+  premiumExpiresAt: string | null;
+  createdAt: string;
+}
 
-  updateMe: (dto: { name?: string; avatarUrl?: string }) =>
-    apiClient.patch('/users/me', dto),
+export interface PublicUser {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+  followerCount: number;
+  followingCount: number;
+  createdAt: string;
+}
+
+export const usersApi = {
+  getMe: () => apiClient.get('/users/me'),
+
+  // Accepts optional avatar file — sends multipart if file present, JSON otherwise
+  updateMe: (dto: { name?: string }, file?: File) => {
+    if (file) {
+      const form = new FormData();
+      if (dto.name !== undefined) form.append('name', dto.name);
+      form.append('avatar', file);
+      return apiClient.patch('/users/me', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return apiClient.patch('/users/me', dto);
+  },
 
   getUser: (userId: string) =>
     apiClient.get(`/users/${userId}`),
-
-  getFollowers: (userId: string, page = 1, limit = 20) =>
-    apiClient.get(`/users/${userId}/followers`, { params: { page, limit } }),
 
   getFollowing: (userId: string, page = 1, limit = 20) =>
     apiClient.get(`/users/${userId}/following`, { params: { page, limit } }),

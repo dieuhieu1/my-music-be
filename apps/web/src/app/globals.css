@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -179,6 +179,114 @@
   opacity: 0.03;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 128px;
+}
+
+/* ── Phase 3: Profile & Artist animations ─────────────────────────────────── */
+@keyframes scaleReveal {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ringPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232,184,75,0.45), 0 0 28px rgba(232,184,75,0.12); }
+  50%       { box-shadow: 0 0 0 10px rgba(232,184,75,0),  0 0 50px rgba(232,184,75,0.22); }
+}
+
+@keyframes followBounce {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(0.93); }
+  65%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+@keyframes heroReveal {
+  from { opacity: 0; transform: translateY(22px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideNav {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes strengthGrow {
+  from { width: 0; }
+}
+
+@keyframes tagIn {
+  from { opacity: 0; transform: translateY(4px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.anim-scale-reveal { animation: scaleReveal 0.55s cubic-bezier(0.16,1,0.3,1) both; }
+.avatar-ring-pulse { animation: ringPulse 2.8s ease-in-out infinite; }
+.anim-hero-reveal  { animation: heroReveal 0.65s cubic-bezier(0.16,1,0.3,1) both; }
+.follow-bounce     { animation: followBounce 0.4s cubic-bezier(0.16,1,0.3,1); }
+
+/* ── Home Page 3D & Enhanced Animations ──────────────────────────────────── */
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  33%       { transform: translateY(-18px) scale(1.03); }
+  66%       { transform: translateY(8px) scale(0.97); }
+}
+
+@keyframes vinyl3dSpin {
+  from { transform: perspective(800px) rotateX(12deg) rotateY(-20deg) rotate(0deg); }
+  to   { transform: perspective(800px) rotateX(12deg) rotateY(-20deg) rotate(360deg); }
+}
+
+@keyframes marqueeScroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes floatCard1 {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  40%       { transform: translateY(-12px) translateX(4px); }
+  70%       { transform: translateY(6px) translateX(-2px); }
+}
+
+@keyframes floatCard2 {
+  0%, 100% { transform: translateY(0px) translateX(0px); }
+  35%       { transform: translateY(9px) translateX(-6px); }
+  65%       { transform: translateY(-7px) translateX(4px); }
+}
+
+@keyframes auroraShift1 {
+  0%, 100% { transform: translateX(0%) translateY(0%) scale(1); opacity: 0.9; }
+  33%       { transform: translateX(6%) translateY(-8%) scale(1.12); opacity: 0.6; }
+  66%       { transform: translateX(-4%) translateY(5%) scale(0.92); opacity: 1; }
+}
+
+@keyframes auroraShift2 {
+  0%, 100% { transform: translateX(0%) translateY(0%) scale(1); }
+  40%       { transform: translateX(-8%) translateY(10%) scale(1.2); }
+  70%       { transform: translateX(5%) translateY(-6%) scale(0.88); }
+}
+
+@keyframes auroraShift3 {
+  0%, 100% { transform: translateX(0%) translateY(0%) scale(1); }
+  45%       { transform: translateX(6%) translateY(-10%) scale(1.15); }
+  75%       { transform: translateX(-3%) translateY(8%) scale(0.94); }
+}
+
+@keyframes scanLine {
+  0%   { opacity: 0; transform: translateX(-100%); }
+  50%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(100%); }
+}
+
+@keyframes progressGrow {
+  0%   { width: 0%; }
+  100% { width: 100%; }
+}
+
+@keyframes glitchSkew {
+  0%, 100% { clip-path: inset(0 0 95% 0); transform: skewX(0deg); }
+  10%       { clip-path: inset(20% 0 60% 0); transform: skewX(-4deg); }
+  20%       { clip-path: inset(50% 0 30% 0); transform: skewX(3deg); }
+  30%       { clip-path: inset(80% 0 5% 0); transform: skewX(-2deg); }
+  40%       { clip-path: inset(0 0 95% 0); transform: skewX(0deg); }
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
