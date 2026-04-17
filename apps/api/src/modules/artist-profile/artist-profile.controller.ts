@@ -92,6 +92,18 @@ export class ArtistProfileController {
     return this.followService.unfollowArtist(followerId, artistUserId);
   }
 
+  // ── GET /artists/:id/is-following (auth required) ────────────────────────
+  // Returns { isFollowing: boolean } so the FE can initialise FollowButton state.
+
+  @Get(':id/is-following')
+  async isFollowing(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) artistUserId: string,
+  ) {
+    const isFollowing = await this.followService.isFollowing(userId, artistUserId);
+    return { isFollowing };
+  }
+
   // ── GET /artists/:id/followers (BL-32) ───────────────────────────────────
 
   @Public()

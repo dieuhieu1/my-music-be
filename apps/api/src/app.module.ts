@@ -13,6 +13,7 @@ import { redisConfig } from './config/redis.config';
 import { minioConfig } from './config/minio.config';
 import { jwtConfig } from './config/jwt.config';
 import { throttlerConfig } from './config/throttler.config';
+import { dspConfig } from './config/dsp.config';
 
 import { HealthModule } from './modules/health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -21,6 +22,9 @@ import { MailModule } from './modules/mail/mail.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ArtistProfileModule } from './modules/artist-profile/artist-profile.module';
+import { SongsModule } from './modules/songs/songs.module';
+import { AlbumsModule } from './modules/albums/albums.module';
+import { GenresModule } from './modules/genres/genres.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -28,7 +32,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     // ── Config (global) ────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, redisConfig, minioConfig, jwtConfig, throttlerConfig],
+      load: [databaseConfig, redisConfig, minioConfig, jwtConfig, throttlerConfig, dspConfig],
       envFilePath: '.env',
     }),
 
@@ -87,7 +91,10 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     UsersModule,
     ArtistProfileModule,
 
-    // Phase 4+: SongsModule, AlbumsModule, ...
+    // ── Phase 4A: Content Upload & DSP Processing ──────────────────────────
+    SongsModule,
+    AlbumsModule,
+    GenresModule,
   ],
   providers: [
     // Global rate limiting

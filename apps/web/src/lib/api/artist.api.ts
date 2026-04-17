@@ -40,6 +40,10 @@ export const artistApi = {
     });
   },
 
+  // Returns { isFollowing: boolean } — requires auth
+  isFollowingArtist: (userId: string) =>
+    apiClient.get<{ isFollowing: boolean }>(`/artists/${userId}/is-following`),
+
   getArtistFollowers: (userId: string, page = 1, limit = 20) =>
     apiClient.get(`/artists/${userId}/followers`, { params: { page, limit } }),
 

@@ -17,6 +17,7 @@ export interface PublicUser {
   id: string;
   name: string;
   avatarUrl: string | null;
+  roles?: string[];
   followerCount: number;
   followingCount: number;
   createdAt: string;

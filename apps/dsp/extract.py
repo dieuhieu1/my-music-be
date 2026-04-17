@@ -2,12 +2,13 @@
 Audio feature extraction using librosa.
 Called by the NestJS audio-extraction BullMQ worker (BL-37A).
 
-Contract: extract_audio_features(audioUrl: str) -> { bpm, camelotKey, energy }
+Contract: extract_audio_features(audioUrl: str) -> { bpm, camelotKey, energy, duration }
 
 - bpm        → tempo in BPM (artist-editable, pre-filled in upload form)
 - camelotKey → Camelot Wheel notation e.g. "8B", "5A" (artist-editable)
 - energy     → composite energy score — stored to DB, NEVER shown to artist
                (used internally by the mood recommendation engine BL-36B)
+- duration   → total audio duration in seconds (stored on Song; not exposed directly)
 """
 
 import io
@@ -32,8 +33,12 @@ def extract_audio_features(audio_url: str) -> dict:
     response.raise_for_status()
     audio_bytes = io.BytesIO(response.content)
 
-    # Load up to 120s (2 min) for speed — enough for accurate analysis
-    y, sr = librosa.load(audio_bytes, sr=None, mono=True, duration=120)
+    # Load the full file to get accurate duration; cap BPM/key analysis at 120s
+    y_full, sr = librosa.load(audio_bytes, sr=None, mono=True)
+    duration = round(float(librosa.get_duration(y=y_full, sr=sr)), 2)
+
+    # Slice to first 120s for BPM + key (much faster, still accurate)
+    y = y_full[: int(120 * sr)]
 
     # ── BPM ──────────────────────────────────────────────────────────────
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
@@ -54,4 +59,4 @@ def extract_audio_features(audio_url: str) -> dict:
     # Composite score: scaled to a roughly 0–10 range
     energy = round(rms * 1000 + spectral_centroid / 10_000, 4)
 
-    return {"bpm": bpm, "camelotKey": camelot_key, "energy": energy}
+    return {"bpm": bpm, "camelotKey": camelot_key, "energy": energy, "duration": duration}

@@ -4,7 +4,14 @@
       "Bash(python -c \":*)",
       "Bash(curl -s http://localhost:3001/api/v1/health)",
       "Bash(curl -s http://localhost:3000)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/profile/edit/page.tsx)",
+      "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/layout.tsx)",
+      "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/artist/profile/page.tsx)",
+      "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/artist/songs/\\\\[id\\\\]/page.tsx)",
+      "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/artist/edit/page.tsx)",
+      "Bash(xargs cat *)",
+      "Bash(cat *)"
     ]
   }
 }

@@ -152,6 +152,12 @@
   transform: scaleX(1);
 }
 
+/* ── Input placeholder colour ────────────────────────────────────────────── */
+input::placeholder,
+textarea::placeholder {
+  color: rgba(90, 85, 80, 0.7);
+}
+
 /* ── Gold shimmer button ──────────────────────────────────────────────────── */
 .btn-gold {
   background: linear-gradient(

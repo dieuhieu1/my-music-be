@@ -28,7 +28,9 @@ export default function PublicArtistProfilePage() {
   const [artist, setArtist]   = useState<ArtistProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [followerCount, setFollowerCount] = useState(0);
+  const [isFollowing, setIsFollowing]     = useState(false);
 
+  // Fetch profile once per artist id — also increments listener count (BL-11)
   useEffect(() => {
     if (!id) return;
     artistApi.getArtistProfile(id)
@@ -40,6 +42,17 @@ export default function PublicArtistProfilePage() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Check following status separately so it doesn't re-trigger the profile fetch
+  useEffect(() => {
+    if (!id || !user) return;
+    artistApi.isFollowingArtist(id)
+      .then((r) => {
+        const body = (r.data as any).data ?? r.data;
+        setIsFollowing(body.isFollowing ?? false);
+      })
+      .catch(() => {});
+  }, [id, user?.id]);
 
   const isOwnProfile = user?.id === artist?.userId;
 
@@ -243,7 +256,7 @@ export default function PublicArtistProfilePage() {
               <FollowButton
                 targetId={artist.userId}
                 targetType="artist"
-                initialIsFollowing={false}
+                initialIsFollowing={isFollowing}
                 size="lg"
                 onFollowChange={(f) => setFollowerCount(c => c + (f ? 1 : -1))}
               />

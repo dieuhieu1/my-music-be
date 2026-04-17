@@ -16,7 +16,8 @@ class ExtractRequest(BaseModel):
 class ExtractResponse(BaseModel):
     bpm: float
     camelotKey: str
-    energy: float  # Hidden from artist — stored in DB only
+    energy: float    # Hidden from artist — stored in DB only
+    duration: float  # Total audio duration in seconds
 
 
 @app.get("/health")

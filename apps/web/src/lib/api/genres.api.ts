@@ -1,27 +1,25 @@
 import apiClient from './axios';
 
+export interface Genre {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
 export const genresApi = {
-  // E4: Public list of confirmed genres
-  getGenres: (page = 1, limit = 50) =>
-    apiClient.get('/genres', { params: { page, limit } }),
+  // Public: get all active genres (used by upload form multi-select)
+  getGenres: () =>
+    apiClient.get<{ data: Genre[] }>('/genres'),
 
-  // L2 Admin: Create genre
-  createGenre: (name: string) =>
-    apiClient.post('/genres', { name }),
+  // Artist: suggest a new genre
+  suggestGenre: (name: string) =>
+    apiClient.post('/genres/suggest', { name }),
 
-  // L2 Admin: Update genre
-  updateGenre: (id: string, name: string) =>
-    apiClient.patch(`/genres/${id}`, { name }),
+  // ── Phase 4B Admin endpoints (stubbed) ────────────────────────────────────
 
-  // L2 Admin: Soft-delete genre
-  deleteGenre: (id: string) =>
-    apiClient.delete(`/genres/${id}`),
-
-  // D5 Admin: Approve genre suggestion
   approveSuggestion: (suggestionId: string) =>
     apiClient.post(`/genres/suggestions/${suggestionId}/approve`),
 
-  // D5 Admin: Reject genre suggestion
   rejectSuggestion: (suggestionId: string, reason?: string) =>
     apiClient.post(`/genres/suggestions/${suggestionId}/reject`, { reason }),
 };

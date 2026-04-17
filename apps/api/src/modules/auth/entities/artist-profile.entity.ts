@@ -39,7 +39,7 @@ export class ArtistProfile {
   listenerCount: number;
 
   @Column({ type: 'simple-json', default: '[]' })
-  socialLinks: Record<string, string>[];
+  socialLinks: { platform: string; url: string }[];
 
   @Column({ name: 'suggested_genres', type: 'simple-array', nullable: true })
   suggestedGenres: string[];

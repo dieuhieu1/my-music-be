@@ -61,7 +61,7 @@ export class UsersService {
       id: user.id,
       name: user.name,
       email: user.email,
-      avatarUrl: await this.resolveAvatarUrl(user.avatarUrl),
+      avatarUrl: this.resolveAvatarUrl(user.avatarUrl),
       roles: user.roles,
       followerCount: user.followerCount,
       followingCount: user.followingCount,
@@ -76,17 +76,16 @@ export class UsersService {
     return {
       id: user.id,
       name: user.name,
-      avatarUrl: await this.resolveAvatarUrl(user.avatarUrl),
+      avatarUrl: this.resolveAvatarUrl(user.avatarUrl),
+      roles: user.roles,
       followerCount: user.followerCount,
       followingCount: user.followingCount,
       createdAt: user.createdAt,
     };
   }
 
-  private resolveAvatarUrl(objectPath: string | null): Promise<string | null> {
-    if (!objectPath) return Promise.resolve(null);
-    return this.storage
-      .presignedGetObject(this.storage.getBuckets().images, objectPath, 3600)
-      .catch(() => null);
+  private resolveAvatarUrl(objectPath: string | null): string | null {
+    if (!objectPath) return null;
+    return this.storage.getPublicUrl(this.storage.getBuckets().images, objectPath);
   }
 }

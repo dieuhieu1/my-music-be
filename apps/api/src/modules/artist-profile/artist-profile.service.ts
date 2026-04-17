@@ -47,7 +47,7 @@ export class ArtistProfileService {
 
     if (dto.stageName !== undefined) profile.stageName = dto.stageName;
     if (dto.bio !== undefined) profile.bio = dto.bio ?? null;
-    // if (dto.socialLinks !== undefined) profile.socialLinks = dto.socialLinks ?? [];
+    if (dto.socialLinks !== undefined) profile.socialLinks = dto.socialLinks ?? [];
 
     if (file) {
       const objectName = `avatars/artists/${userId}`;
@@ -94,10 +94,8 @@ export class ArtistProfileService {
     };
   }
 
-  private resolveAvatarUrl(objectPath: string | null): Promise<string | null> {
-    if (!objectPath) return Promise.resolve(null);
-    return this.storage
-      .presignedGetObject(this.storage.getBuckets().images, objectPath, 3600)
-      .catch(() => null);
+  private resolveAvatarUrl(objectPath: string | null): string | null {
+    if (!objectPath) return null;
+    return this.storage.getPublicUrl(this.storage.getBuckets().images, objectPath);
   }
 }

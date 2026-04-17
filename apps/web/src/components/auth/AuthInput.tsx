@@ -29,13 +29,13 @@ const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
         <div
           style={{
             position: 'relative',
-            background: focused ? 'rgba(232,184,75,0.028)' : 'rgba(255,255,255,0.02)',
-            border: `1px solid ${focused ? 'rgba(232,184,75,0.42)' : 'rgba(255,255,255,0.07)'}`,
+            background: focused ? 'rgba(232,184,75,0.04)' : 'rgba(13,13,13,0.7)',
+            border: `1px solid ${focused ? 'rgba(232,184,75,0.5)' : 'rgba(232,184,75,0.15)'}`,
             borderRadius: 9,
             transition: 'border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease',
             boxShadow: focused
               ? '0 0 0 3px rgba(232,184,75,0.07), 0 4px 16px rgba(0,0,0,0.35)'
-              : '0 2px 8px rgba(0,0,0,0.18)',
+              : '0 2px 8px rgba(0,0,0,0.25)',
           }}
         >
           <input
@@ -52,7 +52,8 @@ const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
               color: 'var(--ivory)',
               fontSize: '0.93rem',
               fontFamily: 'var(--font-body)',
-              padding: '12px 14px',
+              padding: '13px 16px',
+              caretColor: 'var(--gold)',
               ...props.style,
             }}
           />

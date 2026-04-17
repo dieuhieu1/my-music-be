@@ -120,7 +120,7 @@ export class FollowService {
         return {
           id: u?.id,
           name: u?.name,
-          avatarUrl: u?.avatarUrl ? await this.resolveAvatarUrl(u.avatarUrl) : null,
+          avatarUrl: u?.avatarUrl ? this.resolveAvatarUrl(u.avatarUrl) : null,
           followedAt: f.createdAt,
         };
       }),
@@ -151,7 +151,7 @@ export class FollowService {
         return {
           id: u?.id,
           name: u?.name,
-          avatarUrl: u?.avatarUrl ? await this.resolveAvatarUrl(u.avatarUrl) : null,
+          avatarUrl: u?.avatarUrl ? this.resolveAvatarUrl(u.avatarUrl) : null,
           type: f.type,
           followedAt: f.createdAt,
         };
@@ -167,9 +167,7 @@ export class FollowService {
 
   // ── Private ──────────────────────────────────────────────────────────────
 
-  private resolveAvatarUrl(objectPath: string): Promise<string | null> {
-    return this.storage
-      .presignedGetObject(this.storage.getBuckets().images, objectPath, 3600)
-      .catch(() => null);
+  private resolveAvatarUrl(objectPath: string): string | null {
+    return this.storage.getPublicUrl(this.storage.getBuckets().images, objectPath);
   }
 }
