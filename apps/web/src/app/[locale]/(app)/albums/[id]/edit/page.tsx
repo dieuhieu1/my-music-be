@@ -5,9 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   ChevronLeft, ImageIcon, Calendar, CheckCircle2, Trash2,
-  RefreshCw, Music2, Pencil, Clock, XCircle, AlertCircle, Disc,
+  RefreshCw, Music2, Pencil, Clock, XCircle, AlertCircle, Disc, Plus, Loader2,
 } from 'lucide-react';
 import { albumsApi, type Album, type AlbumTrack } from '@/lib/api/albums.api';
+import { songsApi, type Song } from '@/lib/api/songs.api';
 
 // ── Status badge (mirrors songs page) ────────────────────────────────────────
 function StatusBadge({ status }: { status: string | null }) {
@@ -190,19 +191,51 @@ export default function EditAlbumPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting]     = useState(false);
 
+  // Add existing song state
+  const [mySongs, setMySongs]       = useState<Song[]>([]);
+  const [addingSongId, setAddingSongId] = useState<string | null>(null);
+
+  const loadAlbum = async () => {
+    const res = await albumsApi.getAlbum(id);
+    const a: Album = (res.data as any).data ?? res.data;
+    setAlbum(a);
+    setTitle(a.title ?? '');
+    setDescription(a.description ?? '');
+    setReleasedAt(a.releasedAt ? a.releasedAt.slice(0, 10) : '');
+    setCoverPreview(a.coverArtUrl ?? null);
+  };
+
   useEffect(() => {
-    albumsApi.getAlbum(id)
-      .then(res => {
-        const a: Album = (res.data as any).data ?? res.data;
+    Promise.all([
+      albumsApi.getAlbum(id),
+      songsApi.getMySongs(),
+    ]).then(([albumRes, songsRes]) => {
+        const a: Album = (albumRes.data as any).data ?? albumRes.data;
         setAlbum(a);
         setTitle(a.title ?? '');
         setDescription(a.description ?? '');
         setReleasedAt(a.releasedAt ? a.releasedAt.slice(0, 10) : '');
         setCoverPreview(a.coverArtUrl ?? null);
+        const s: Song[] = (songsRes.data as any).data ?? songsRes.data;
+        setMySongs(Array.isArray(s) ? s : []);
       })
       .catch(() => setNotFound(true))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const handleAddSong = async (songId: string) => {
+    setAddingSongId(songId);
+    try {
+      const fd = new FormData();
+      fd.append('albumId', id);
+      await songsApi.updateSong(songId, fd);
+      await loadAlbum();
+    } catch {
+      // ignore — song may already be in an album
+    } finally {
+      setAddingSongId(null);
+    }
+  };
 
   const handleCoverChange = (f: File | null) => {
     setCoverFile(f);
@@ -275,7 +308,7 @@ export default function EditAlbumPage() {
 
   // ── Page ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ padding: '32px 32px' }}>
 
       {/* Back nav */}
       <Link
@@ -507,6 +540,74 @@ export default function EditAlbumPage() {
           )
         }
       </div>
+
+      {/* ── Add existing song ── */}
+      {(() => {
+        const inAlbum = new Set((album.tracks ?? []).map((t) => t.songId));
+        const available = mySongs.filter((s) => !inAlbum.has(s.id));
+        if (available.length === 0) return null;
+        return (
+          <div className="anim-fade-up anim-fade-up-6" style={{ marginBottom: 40 }}>
+            <h2 style={{
+              fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 400,
+              color: 'var(--ivory)', letterSpacing: '0.01em', marginBottom: 16,
+            }}>
+              Add Existing Song
+            </h2>
+            <div style={{ background: '#111', border: '1px solid rgba(42,37,32,0.6)', borderRadius: 8, overflow: 'hidden' }}>
+              {available.map((s, i) => (
+                <div key={s.id} className={`anim-fade-up anim-fade-up-${Math.min(i + 1, 8)}`} style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '10px 18px',
+                  borderBottom: i < available.length - 1 ? '1px solid rgba(42,37,32,0.5)' : 'none',
+                }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: 4, flexShrink: 0,
+                    background: s.coverArtUrl ? 'transparent' : 'rgba(232,184,75,0.05)',
+                    border: '1px solid rgba(232,184,75,0.08)', overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {s.coverArtUrl
+                      ? <img src={s.coverArtUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <Music2 size={14} color="rgba(232,184,75,0.2)" />
+                    }
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ color: 'var(--ivory)', fontSize: '0.84rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.title}
+                    </p>
+                    {s.bpm !== null && (
+                      <p style={{ fontSize: '0.68rem', color: 'var(--muted-text)', marginTop: 1 }}>
+                        {s.bpm} BPM {s.camelotKey ? `· ${s.camelotKey}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={addingSongId === s.id}
+                    onClick={() => handleAddSong(s.id)}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '5px 12px', borderRadius: 4, cursor: 'pointer',
+                      background: 'rgba(232,184,75,0.07)', border: '1px solid rgba(232,184,75,0.18)',
+                      color: 'var(--gold)', fontSize: '0.7rem', letterSpacing: '0.04em',
+                      transition: 'background 0.15s, border-color 0.15s',
+                      opacity: addingSongId === s.id ? 0.6 : 1,
+                    }}
+                    onMouseEnter={e => { if (addingSongId !== s.id) { e.currentTarget.style.background = 'rgba(232,184,75,0.14)'; e.currentTarget.style.borderColor = 'rgba(232,184,75,0.35)'; } }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'rgba(232,184,75,0.07)'; e.currentTarget.style.borderColor = 'rgba(232,184,75,0.18)'; }}
+                  >
+                    {addingSongId === s.id
+                      ? <Loader2 size={11} className="animate-spin" />
+                      : <Plus size={11} />
+                    }
+                    Add
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Danger zone ── */}
       <div className="anim-fade-up anim-fade-up-6" style={{

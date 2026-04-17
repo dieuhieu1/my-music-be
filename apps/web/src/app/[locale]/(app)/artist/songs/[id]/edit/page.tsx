@@ -7,6 +7,7 @@ import {
   ArrowLeft, Check, Loader2, Music2, Cpu, AlertTriangle, Image, Trash2, CheckCircle2
 } from 'lucide-react';
 import { songsApi, type Song } from '@/lib/api/songs.api';
+import { albumsApi, type Album } from '@/lib/api/albums.api';
 import { genresApi, type Genre } from '@/lib/api/genres.api';
 
 const CAMELOT_CODES = [
@@ -149,6 +150,7 @@ export default function EditSongPage() {
 
   const [song, setSong]           = useState<Song | null>(null);
   const [genres, setGenres]       = useState<Genre[]>([]);
+  const [albums, setAlbums]       = useState<Album[]>([]);
   const [loading, setLoading]     = useState(true);
   const [saving, setSaving]       = useState(false);
   const [saved, setSaved]         = useState(false);
@@ -162,6 +164,7 @@ export default function EditSongPage() {
   const [camelotKey, setCamelotKey]   = useState('');
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [coverFile, setCoverFile]     = useState<File | null>(null);
+  const [albumId, setAlbumId]         = useState('');
 
   // Whether DSP is still running (bpm is null)
   const [extracting, setExtracting]   = useState(false);
@@ -170,9 +173,11 @@ export default function EditSongPage() {
     Promise.all([
       songsApi.getSong(id),
       genresApi.getGenres(),
-    ]).then(([songRes, genresRes]) => {
+      albumsApi.getMyAlbums(),
+    ]).then(([songRes, genresRes, albumsRes]) => {
       const s: Song = (songRes.data as any).data ?? songRes.data;
       const g: Genre[] = (genresRes.data as any).data ?? genresRes.data;
+      const a: Album[] = (albumsRes.data as any).data ?? albumsRes.data;
 
       setSong(s);
       setTitle(s.title);
@@ -180,6 +185,7 @@ export default function EditSongPage() {
       setCamelotKey(s.camelotKey ?? '');
       setSelectedGenres(s.genreIds ?? []);
       setGenres(Array.isArray(g) ? g : []);
+      setAlbums(Array.isArray(a) ? a : []);
       setExtracting(s.bpm === null);
     }).catch(() => setError('Failed to load song.')).finally(() => setLoading(false));
   }, [id]);
@@ -205,6 +211,7 @@ export default function EditSongPage() {
     if (camelotKey) fd.append('camelotKey', camelotKey);
     selectedGenres.forEach((gId) => fd.append('genreIds', gId));
     if (coverFile)  fd.append('coverArt', coverFile);
+    if (albumId)    fd.append('albumId', albumId);
 
     try {
       const res = await songsApi.updateSong(id, fd);
@@ -248,7 +255,7 @@ export default function EditSongPage() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ padding: '32px 32px' }}>
 
       {/* Header */}
       <div className="anim-fade-up anim-fade-up-1" style={{ marginBottom: 28 }}>
@@ -363,6 +370,26 @@ export default function EditSongPage() {
             })}
           </div>
         </div>
+
+        {/* Album assignment */}
+        {albums.length > 0 && (
+          <div className="anim-fade-up anim-fade-up-6" style={{ marginBottom: 28 }}>
+            <label style={{ display: 'block', fontSize: '0.65rem', letterSpacing: '0.13em', textTransform: 'uppercase', color: 'var(--muted-text)', marginBottom: 10 }}>
+              Add to Album
+            </label>
+            <select value={albumId} onChange={(e) => setAlbumId(e.target.value)} style={{
+              width: '100%', padding: '10px 12px', background: '#111', border: '1px solid #2a2520',
+              borderRadius: 4, color: albumId ? 'var(--ivory)' : 'var(--muted-text)',
+              fontSize: '0.88rem', fontFamily: 'var(--font-body)', outline: 'none', cursor: 'pointer',
+            }}>
+              <option value="">— No change —</option>
+              {albums.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+            </select>
+            <p style={{ fontSize: '0.68rem', color: 'var(--muted-text)', marginTop: 6 }}>
+              Selecting an album will move this song into it. Leave blank to keep the current assignment.
+            </p>
+          </div>
+        )}
 
         {/* Duration (read-only) */}
         {song?.duration !== null && song?.duration !== undefined && (

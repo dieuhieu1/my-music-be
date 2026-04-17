@@ -18,6 +18,7 @@ import {
   Shield,
   UserCircle2,
   LogOut,
+  Disc,
 } from 'lucide-react';
 import { authApi } from '@/lib/api/auth.api';
 import { useRouter } from 'next/navigation';
@@ -38,11 +39,12 @@ const listenerItems: NavItem[] = [
 ];
 
 const artistItems: NavItem[] = [
-  { href: '/artist/profile',   label: 'My Profile',  Icon: Mic2      },
-  { href: '/artist/songs',     label: 'My Songs',    Icon: Library   },
-  { href: '/artist/upload',    label: 'Upload',      Icon: Upload    },
-  { href: '/artist/analytics', label: 'Analytics',   Icon: BarChart2 },
-  { href: '/artist/drops',     label: 'Live Drops',  Icon: Radio     },
+  { href: '/artist/profile',   label: 'My Profile',    Icon: Mic2      },
+  { href: '/artist/songs',     label: 'My Songs',      Icon: Library   },
+  { href: '/artist/upload',    label: 'Upload',        Icon: Upload    },
+  { href: '/artist/albums',    label: 'My Albums',     Icon: Disc      },
+  { href: '/artist/analytics', label: 'Analytics',     Icon: BarChart2 },
+  { href: '/artist/drops',     label: 'Live Drops',    Icon: Radio     },
 ];
 
 // ── Single nav item ────────────────────────────────────────────────────────

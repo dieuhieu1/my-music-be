@@ -92,7 +92,7 @@ export default function CreateAlbumPage() {
   };
 
   return (
-    <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ padding: '32px 32px' }}>
 
       {/* Back nav */}
       <Link

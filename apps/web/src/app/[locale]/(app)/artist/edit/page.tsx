@@ -86,7 +86,7 @@ export default function EditArtistProfilePage() {
   };
 
   return (
-    <div style={{ maxWidth: 560, margin: '0 auto', padding: '32px 24px' }}>
+    <div style={{ padding: '32px 32px' }}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="anim-fade-up anim-fade-up-1" style={{ marginBottom: 36 }}>

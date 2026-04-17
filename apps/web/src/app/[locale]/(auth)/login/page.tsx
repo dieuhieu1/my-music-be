@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { useLocale } from 'next-intl';
 import { authApi } from '@/lib/api/auth.api';
 import { useAuthStore } from '@/store/useAuthStore';
+import { getRoleHome } from '@/lib/utils/roleRedirect';
 import AuthInput from '@/components/auth/AuthInput';
 import PasswordInput from '@/components/auth/PasswordInput';
 import AuthButton from '@/components/auth/AuthButton';
@@ -49,7 +50,7 @@ export default function LoginPage() {
       const res = await authApi.login(data);
       const user = (res.data as any)?.data?.user ?? (res.data as any)?.user;
       if (user) setUser(user);
-      router.push(`/${locale}/browse`);
+      router.push(getRoleHome(user?.roles, locale));
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? 'Login failed. Please try again.';
       if (err?.response?.status === 403 && msg.toLowerCase().includes('locked')) {
