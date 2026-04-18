@@ -16,9 +16,9 @@
 | 2 | ✅ Done | Auth (register, login, logout, refresh, forgot/reset password, email verify, sessions) |
 | 3 | ✅ Done | User & Artist Profiles, follow/unfollow, avatar upload, public artist page |
 | 4A | ✅ Done | Content Upload & DSP Processing — songs, albums, genres, AES-256 enc, audio-extraction worker |
-| 4B | 🔲 Next | Admin Approval & Moderation |
-| 5 | 🔲 Todo | Browse, Search & Streaming |
-| 6 | 🔲 Todo | Playlists & Social Feed |
+| 4B | ✅ Done | Admin Approval & Moderation — song queue, approve/reject/reupload/restore, genre suggestion approval, bulk-tagging worker, audit log, email notifications, resubmit flow |
+| 5 | ✅ Done | Browse, Search & Streaming — BE + FE complete |
+| 6 | 🔄 In Progress | Playlists & Social Feed — BE complete, FE pending |
 | 7 | 🔲 Todo | Payments & Premium Downloads |
 | 8 | 🔲 Todo | Drops & Notifications |
 | 9 | 🔲 Todo | Reports, Analytics & Admin Tools |
@@ -268,7 +268,7 @@ Browser test:
 
 ---
 
-## Phase 4B — Admin Approval & Moderation (Admin Flow)
+## Phase 4B — Admin Approval & Moderation (Admin Flow) ✅ COMPLETE
 
 **BL codes:** BL-37, BL-40, BL-49, BL-68–71, BL-83–85
 

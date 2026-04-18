@@ -10,6 +10,8 @@ import { SongsService } from './songs.service';
 import { SongsController } from './songs.controller';
 import { AudioExtractionWorker } from '../queue/workers/audio-extraction.worker';
 import { AlbumsModule } from '../albums/albums.module';
+import { forwardRef } from '@nestjs/common';
+import { PlaylistsModule } from '../playlists/playlists.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { AlbumsModule } from '../albums/albums.module';
     HttpModule,
     // AlbumsModule is needed so SongsService can call AlbumsService.recomputeAlbumStats()
     AlbumsModule,
+    // forwardRef to break the Songs ↔ Playlists circular dependency
+    forwardRef(() => PlaylistsModule),
   ],
   controllers: [SongsController],
   providers: [SongsService, AudioExtractionWorker],

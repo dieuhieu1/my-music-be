@@ -22,7 +22,7 @@ export class AlbumsService {
     private readonly dataSource: DataSource,
   ) {}
 
-  // ── GET /albums ───────────────────────────────────────────────────────────
+  // ── GET /albums/mine (artist's own albums) ───────────────────────────────
 
   async findAllByUser(userId: string) {
     const albums = await this.albums.find({
@@ -30,6 +30,23 @@ export class AlbumsService {
       order: { createdAt: 'DESC' },
     });
     return Promise.all(albums.map((a) => this.buildAlbumSummary(a)));
+  }
+
+  // ── GET /albums (public paginated browse) ────────────────────────────────
+
+  async browsePaginated(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+    const [items, total] = await this.albums.findAndCount({
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
+    });
+    return {
+      items: await Promise.all(items.map((a) => this.buildAlbumSummary(a))),
+      total,
+      page,
+      limit,
+    };
   }
 
   // ── POST /albums ──────────────────────────────────────────────────────────
@@ -144,7 +161,7 @@ export class AlbumsService {
 
   // ── Response builders ─────────────────────────────────────────────────────
 
-  private async buildAlbumSummary(album: Album) {
+  async buildAlbumSummary(album: Album) {
     return {
       id: album.id,
       userId: album.userId,

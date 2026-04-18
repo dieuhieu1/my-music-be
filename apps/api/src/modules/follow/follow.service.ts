@@ -10,15 +10,17 @@ import { DataSource, In, Repository } from 'typeorm';
 import { Follow } from './entities/follow.entity';
 import { User } from '../auth/entities/user.entity';
 import { ArtistProfile } from '../auth/entities/artist-profile.entity';
-import { Role } from '../../common/enums';
+import { FeedEvent } from '../feed/entities/feed-event.entity';
+import { FeedEventType, Role } from '../../common/enums';
 import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class FollowService {
   constructor(
-    @InjectRepository(Follow) private readonly follows: Repository<Follow>,
-    @InjectRepository(User) private readonly users: Repository<User>,
-    @InjectRepository(ArtistProfile) private readonly artists: Repository<ArtistProfile>,
+    @InjectRepository(Follow)        private readonly follows:   Repository<Follow>,
+    @InjectRepository(User)          private readonly users:     Repository<User>,
+    @InjectRepository(ArtistProfile) private readonly artists:   Repository<ArtistProfile>,
+    @InjectRepository(FeedEvent)     private readonly feedEvents: Repository<FeedEvent>,
     private readonly dataSource: DataSource,
     private readonly storage: StorageService,
   ) {}
@@ -45,6 +47,14 @@ export class FollowService {
       await manager.increment(User, { id: artistUserId }, 'followerCount', 1);
       await manager.increment(ArtistProfile, { userId: artistUserId }, 'followerCount', 1);
       await manager.increment(User, { id: followerId }, 'followingCount', 1);
+
+      // BL-33: emit ARTIST_FOLLOWED feed event so actor's followers see it
+      await manager.insert(FeedEvent, {
+        actorId: followerId,
+        eventType: FeedEventType.ARTIST_FOLLOWED,
+        entityId: artistUserId,
+        entityType: 'USER',
+      });
     });
   }
 

@@ -1,35 +1,40 @@
 import apiClient from './axios';
 
+export interface QueueItem {
+  queueItemId: string;
+  position: number;
+  id: string;
+  title: string;
+  artistName: string;
+  coverArtUrl: string | null;
+  durationSeconds: number | null;
+  camelotKey: string | null;
+  bpm: number | null;
+}
+
 export const playbackApi = {
-  getState: () =>
-    apiClient.get('/playback/state'),
+  // ── Queue (BL-31) ─────────────────────────────────────────────────────────
 
-  saveState: (songId: string, positionSeconds: number) =>
-    apiClient.post('/playback/state', { songId, positionSeconds }),
-
-  getHistory: (page = 1, limit = 20) =>
-    apiClient.get('/playback/history', { params: { page, limit } }),
-
-  // Queue (BL-31)
   getQueue: () =>
-    apiClient.get('/playback/queue'),
+    apiClient.get<{ data: QueueItem[] }>('/queue'),
 
   addToQueue: (songId: string) =>
-    apiClient.post('/playback/queue', { songId }),
+    apiClient.post('/queue', { songId }),
 
-  removeFromQueue: (songId: string) =>
-    apiClient.delete(`/playback/queue/${songId}`),
+  removeFromQueue: (itemId: string) =>
+    apiClient.delete(`/queue/${itemId}`),
 
-  reorderQueue: (songId: string, newPosition: number) =>
-    apiClient.patch(`/playback/queue/${songId}/position`, { newPosition }),
+  reorderQueue: (items: { id: string; position: number }[]) =>
+    apiClient.patch('/queue/reorder', { items }),
+
+  smartOrder: () =>
+    apiClient.patch('/queue/smart-order'),
 
   clearQueue: () =>
-    apiClient.delete('/playback/queue'),
+    apiClient.delete('/queue'),
 
-  toggleShuffle: (enabled: boolean) =>
-    apiClient.patch('/playback/queue/shuffle', { enabled }),
+  // ── Play history (BL-30) ──────────────────────────────────────────────────
 
-  // Smart Order (BL-37C)
-  toggleSmartOrder: (enabled: boolean) =>
-    apiClient.patch('/playback/queue/smart-order', { enabled }),
+  recordPlay: (songId: string, playedAt?: string) =>
+    apiClient.post('/playback/history', { songId, ...(playedAt ? { playedAt } : {}) }),
 };

@@ -5,6 +5,7 @@ import {
   Patch,
   Delete,
   Param,
+  Query,
   Body,
   UploadedFiles,
   UseInterceptors,
@@ -18,10 +19,13 @@ import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 
 import { SongsService } from './songs.service';
+import { PlaylistsService } from '../playlists/playlists.service';
 import { UploadSongDto } from './dto/upload-song.dto';
 import { UpdateSongDto } from './dto/update-song.dto';
 import { ResubmitSongDto } from './dto/resubmit-song.dto';
+import { BrowseSongsDto } from './dto/browse-songs.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Role } from '../../common/enums';
@@ -53,7 +57,18 @@ type UploadedFileMap = {
 
 @Controller('songs')
 export class SongsController {
-  constructor(private readonly songsService: SongsService) {}
+  constructor(
+    private readonly songsService: SongsService,
+    private readonly playlistsService: PlaylistsService,
+  ) {}
+
+  // ── GET /songs (BL-09: public browse, LIVE songs only) ───────────────────
+
+  @Get()
+  @Public()
+  browse(@Query() dto: BrowseSongsDto) {
+    return this.songsService.browse(dto);
+  }
 
   // ── POST /songs/upload (BL-48, BL-39, BL-44) ─────────────────────────────
 
@@ -80,14 +95,25 @@ export class SongsController {
     return this.songsService.findAllByUser(userId);
   }
 
-  // ── GET /songs/:id ────────────────────────────────────────────────────────
+  // ── GET /songs/:id (BL-09: increments listenCount for LIVE songs) ──────────
 
   @Get(':id')
+  @Public()
   findOne(
-    @CurrentUser('id') requesterId: string,
+    @CurrentUser('id') requesterId: string | null,
     @Param('id', ParseUUIDPipe) songId: string,
   ) {
     return this.songsService.findById(requesterId, songId);
+  }
+
+  // ── GET /songs/:id/stream (BL-28: 15-min presigned URL) ──────────────────
+
+  @Get(':id/stream')
+  stream(
+    @CurrentUser('id') requesterId: string,
+    @Param('id', ParseUUIDPipe) songId: string,
+  ) {
+    return this.songsService.getStreamUrl(requesterId, songId);
   }
 
   // ── PATCH /songs/:id ──────────────────────────────────────────────────────
@@ -134,5 +160,27 @@ export class SongsController {
     @Param('id', ParseUUIDPipe) songId: string,
   ) {
     return this.songsService.remove(userId, songId);
+  }
+
+  // ── POST /songs/:id/like (BL-34) ──────────────────────────────────────────
+
+  @Post(':id/like')
+  @HttpCode(HttpStatus.OK)
+  likeSong(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) songId: string,
+  ) {
+    return this.playlistsService.likeSong(userId, songId);
+  }
+
+  // ── DELETE /songs/:id/like (BL-34) ────────────────────────────────────────
+
+  @Delete(':id/like')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  unlikeSong(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) songId: string,
+  ) {
+    return this.playlistsService.unlikeSong(userId, songId);
   }
 }

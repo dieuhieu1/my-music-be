@@ -28,6 +28,10 @@ import { GenresModule } from './modules/genres/genres.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { PlaybackModule } from './modules/playback/playback.module';
+import { SearchModule } from './modules/search/search.module';
+import { PlaylistsModule } from './modules/playlists/playlists.module';
+import { FeedModule } from './modules/feed/feed.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -103,6 +107,14 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     AuditModule,
     NotificationsModule,
     AdminModule,
+
+    // ── Phase 5: Browse, Search & Streaming ───────────────────────────────
+    PlaybackModule,
+    SearchModule,
+
+    // ── Phase 6: Playlists & Social Feed ──────────────────────────────
+    PlaylistsModule,
+    FeedModule,
   ],
   providers: [
     // Global rate limiting

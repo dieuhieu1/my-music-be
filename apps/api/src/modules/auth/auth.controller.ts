@@ -117,6 +117,7 @@ export class AuthController {
 
   // ── Authenticated endpoints ────────────────────────────────────────────────
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   logout(

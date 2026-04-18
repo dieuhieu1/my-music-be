@@ -14,6 +14,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { Song } from './entities/song.entity';
 import { SongEncryptionKey } from './entities/song-encryption-key.entity';
+import { SongDailyStats } from './entities/song-daily-stats.entity';
 import { Album } from '../albums/entities/album.entity';
 import { AlbumSong } from '../albums/entities/album-song.entity';
 import { GenreSuggestion } from '../genres/entities/genre-suggestion.entity';
@@ -24,6 +25,7 @@ import { QUEUE_NAMES } from '../queue/queue.constants';
 import { UploadSongDto } from './dto/upload-song.dto';
 import { UpdateSongDto } from './dto/update-song.dto';
 import { ResubmitSongDto } from './dto/resubmit-song.dto';
+import { BrowseSongsDto } from './dto/browse-songs.dto';
 import { SongStatus } from '../../common/enums';
 
 // ── Audio magic-byte helpers ─────────────────────────────────────────────────
@@ -101,6 +103,7 @@ export class SongsService {
   constructor(
     @InjectRepository(Song) private readonly songs: Repository<Song>,
     @InjectRepository(SongEncryptionKey) private readonly encryptionKeys: Repository<SongEncryptionKey>,
+    @InjectRepository(SongDailyStats) private readonly dailyStats: Repository<SongDailyStats>,
     @InjectRepository(User) private readonly users: Repository<User>,
     private readonly storage: StorageService,
     private readonly albumsService: AlbumsService,
@@ -250,13 +253,61 @@ export class SongsService {
     return this.buildSongResponse(song);
   }
 
+  // ── GET /songs (BL-09 public browse) ─────────────────────────────────────
+
+  async browse(dto: BrowseSongsDto) {
+    const page  = Math.max(1, dto.page  ?? 1);
+    const limit = Math.min(100, Math.max(1, dto.limit ?? 20));
+    const skip  = (page - 1) * limit;
+
+    const qb = this.songs
+      .createQueryBuilder('s')
+      .where('s.status = :status', { status: SongStatus.LIVE })
+      .orderBy('s.created_at', 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    if (dto.q?.trim()) {
+      qb.andWhere('s.title ILIKE :q', { q: `%${dto.q.trim()}%` });
+    }
+
+    // genre_ids is stored as a TypeORM simple-array (comma-separated string).
+    // We guard against partial UUID matches by checking all four positions.
+    if (dto.genre) {
+      const gid = dto.genre;
+      qb.andWhere(
+        '(s.genre_ids = :gid OR s.genre_ids LIKE :gidStart OR s.genre_ids LIKE :gidMiddle OR s.genre_ids LIKE :gidEnd)',
+        {
+          gid,
+          gidStart:  `${gid},%`,
+          gidMiddle: `%,${gid},%`,
+          gidEnd:    `%,${gid}`,
+        },
+      );
+    }
+
+    const [items, total] = await qb.getManyAndCount();
+    return {
+      items: await Promise.all(items.map((s) => this.buildSongResponse(s))),
+      total,
+      page,
+      limit,
+    };
+  }
+
   // ── GET /songs/:id ────────────────────────────────────────────────────────
 
-  async findById(requesterId: string, songId: string) {
+  async findById(requesterId: string | null, songId: string) {
     const song = await this.songs.findOne({ where: { id: songId } });
     if (!song) throw new NotFoundException('Song not found');
 
-    // Only the owner can view a PENDING/REJECTED song
+    // Unauthenticated users can only see LIVE songs
+    if (!requesterId) {
+      if (song.status !== SongStatus.LIVE) throw new NotFoundException('Song not found');
+      return this.buildSongResponse(song);
+    }
+
+    // Only the owner can view a non-public song
     if (
       song.status === SongStatus.PENDING ||
       song.status === SongStatus.REJECTED ||
@@ -265,7 +316,49 @@ export class SongsService {
       if (song.userId !== requesterId) throw new NotFoundException('Song not found');
     }
 
+    // BL-09 — increment listenCount + upsert daily stats for LIVE songs viewed by others
+    if (song.status === SongStatus.LIVE && song.userId !== requesterId) {
+      await this.recordListen(song);
+    }
+
     return this.buildSongResponse(song);
+  }
+
+  // ── GET /songs/:id/stream (BL-28) — presigned MinIO URL, 15-min expiry ──
+
+  async getStreamUrl(requesterId: string, songId: string) {
+    const song = await this.songs.findOne({ where: { id: songId } });
+    if (!song) throw new NotFoundException('Song not found');
+
+    if (song.status !== SongStatus.LIVE && song.userId !== requesterId) {
+      throw new NotFoundException('Song not found');
+    }
+
+    const expirySeconds = 900; // 15 min (BL-28)
+    const url = await this.storage.presignedGetObject(
+      this.storage.getBuckets().audio,
+      song.fileUrl,
+      expirySeconds,
+    );
+
+    const expiresAt = new Date(Date.now() + expirySeconds * 1000).toISOString();
+    return { url, expiresAt };
+  }
+
+  // ── Private: atomic listenCount increment + daily stats upsert (BL-09) ──
+
+  private async recordListen(song: Song): Promise<void> {
+    // Atomic increment — avoids race conditions between concurrent requests
+    await this.songs.increment({ id: song.id }, 'listenCount', 1);
+
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    await this.dataSource.query(
+      `INSERT INTO song_daily_stats (id, song_id, date, play_count)
+       VALUES (gen_random_uuid(), $1, $2, 1)
+       ON CONFLICT (song_id, date) DO UPDATE
+         SET play_count = song_daily_stats.play_count + 1`,
+      [song.id, today],
+    );
   }
 
   // ── PATCH /songs/:id ──────────────────────────────────────────────────────

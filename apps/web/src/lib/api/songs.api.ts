@@ -16,6 +16,9 @@ export interface Song {
   listenCount: number;
   createdAt: string;
   updatedAt: string;
+  // Populated by BE when fetching public/browse endpoints
+  artistName?: string;
+  artistId?: string;
 }
 
 export const songsApi = {
@@ -43,7 +46,17 @@ export const songsApi = {
   deleteSong: (id: string) =>
     apiClient.delete(`/songs/${id}`),
 
-  // ── Phase 5+ endpoints (stubbed) ──────────────────────────────────────────
+  // ── Phase 5: Browse & Streaming ───────────────────────────────────────────
+
+  // Public browse — LIVE songs with optional filters (E2)
+  browseSongs: (params?: { page?: number; limit?: number; genre?: string; q?: string }) =>
+    apiClient.get<{ data: { items: Song[]; total: number; page: number; limit: number } }>('/songs', { params }),
+
+  // Presigned 15-min stream URL (BL-28)
+  getStreamUrl: (id: string) =>
+    apiClient.get<{ data: { url: string; expiresAt: string } }>(`/songs/${id}/stream`),
+
+  // ── Phase 5+: stubbed ──────────────────────────────────────────────────────
 
   getSongTeaser: (id: string) =>
     apiClient.get(`/songs/${id}/teaser`),

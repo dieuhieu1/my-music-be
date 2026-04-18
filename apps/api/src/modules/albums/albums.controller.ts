@@ -6,10 +6,13 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UploadedFile,
   UseInterceptors,
   UseGuards,
   ParseUUIDPipe,
+  ParseIntPipe,
+  DefaultValuePipe,
   HttpCode,
   HttpStatus,
   BadRequestException,
@@ -21,6 +24,7 @@ import { AlbumsService } from './albums.service';
 import { CreateAlbumDto } from './dto/create-album.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Role } from '../../common/enums';
@@ -38,21 +42,42 @@ const coverArtInterceptor = FileInterceptor('coverArt', {
 });
 
 @Controller('albums')
-@UseGuards(RolesGuard)
-@Roles(Role.ARTIST)
 export class AlbumsController {
   constructor(private readonly albumsService: AlbumsService) {}
 
-  // ── GET /albums (own albums) ──────────────────────────────────────────────
+  // ── GET /albums (public paginated browse) ────────────────────────────────
 
   @Get()
-  findAll(@CurrentUser('id') userId: string) {
+  @Public()
+  browse(
+    @Query('page',  new DefaultValuePipe(1),  ParseIntPipe) page:  number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.albumsService.browsePaginated(page, Math.min(limit, 100));
+  }
+
+  // ── GET /albums/mine (artist's own albums) ───────────────────────────────
+
+  @Get('mine')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ARTIST)
+  findMine(@CurrentUser('id') userId: string) {
     return this.albumsService.findAllByUser(userId);
+  }
+
+  // ── GET /albums/:id (public) ──────────────────────────────────────────────
+
+  @Get(':id')
+  @Public()
+  findOne(@Param('id', ParseUUIDPipe) albumId: string) {
+    return this.albumsService.findById(albumId);
   }
 
   // ── POST /albums ──────────────────────────────────────────────────────────
 
   @Post()
+  @UseGuards(RolesGuard)
+  @Roles(Role.ARTIST)
   @UseInterceptors(coverArtInterceptor)
   create(
     @CurrentUser('id') userId: string,
@@ -62,16 +87,11 @@ export class AlbumsController {
     return this.albumsService.create(userId, dto, coverArtFile);
   }
 
-  // ── GET /albums/:id ───────────────────────────────────────────────────────
-
-  @Get(':id')
-  findOne(@Param('id', ParseUUIDPipe) albumId: string) {
-    return this.albumsService.findById(albumId);
-  }
-
   // ── PATCH /albums/:id ─────────────────────────────────────────────────────
 
   @Patch(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ARTIST)
   @UseInterceptors(coverArtInterceptor)
   update(
     @CurrentUser('id') userId: string,
@@ -85,6 +105,8 @@ export class AlbumsController {
   // ── DELETE /albums/:id (BL-18) ────────────────────────────────────────────
 
   @Delete(':id')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ARTIST)
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(
     @CurrentUser('id') userId: string,

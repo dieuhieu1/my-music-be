@@ -27,9 +27,13 @@ export interface Album {
 export const albumsApi = {
   // Artist: list own albums
   getMyAlbums: () =>
-    apiClient.get<{ data: Album[] }>('/albums'),
+    apiClient.get<{ data: Album[] }>('/albums/mine'),
 
-  // Artist: get a single album with its track list
+  // Public: browse all albums with pagination
+  browseAlbums: (params?: { page?: number; limit?: number }) =>
+    apiClient.get<{ data: { items: Album[]; total: number; page: number; limit: number } }>('/albums', { params }),
+
+  // Get a single album with its track list
   getAlbum: (id: string) =>
     apiClient.get<{ data: Album }>(`/albums/${id}`),
 

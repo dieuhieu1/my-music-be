@@ -22,8 +22,11 @@ import {
   Tags,
   ClipboardList,
   LayoutDashboard,
+  ListOrdered,
 } from 'lucide-react';
 import { authApi } from '@/lib/api/auth.api';
+import { usePlayerStore } from '@/store/usePlayerStore';
+import { useQueueStore } from '@/store/useQueueStore';
 import { useRouter } from 'next/navigation';
 
 // ── Nav item shape ─────────────────────────────────────────────────────────
@@ -35,11 +38,12 @@ interface NavItem {
 }
 
 const listenerItems: NavItem[] = [
-  { href: '/browse',          label: 'Browse',          Icon: Compass    },
-  { href: '/playlists',       label: 'Playlists',       Icon: ListMusic  },
-  { href: '/playlists/liked', label: 'Liked Songs',     Icon: Heart      },
-  { href: '/playlists/saved', label: 'Saved',           Icon: Bookmark   },
-  { href: '/feed',            label: 'Activity Feed',   Icon: Activity   },
+  { href: '/browse',          label: 'Browse',          Icon: Compass      },
+  { href: '/queue',           label: 'Queue',           Icon: ListOrdered  },
+  { href: '/playlists',       label: 'Playlists',       Icon: ListMusic    },
+  { href: '/playlists/liked', label: 'Liked Songs',     Icon: Heart        },
+  { href: '/playlists/saved', label: 'Saved',           Icon: Bookmark     },
+  { href: '/feed',            label: 'Activity Feed',   Icon: Activity     },
 ];
 
 const artistItems: NavItem[] = [
@@ -131,9 +135,19 @@ export default function Sidebar() {
       : pathname === `/${locale}${href}` || pathname.startsWith(`/${locale}${href}/`);
 
   const handleLogout = async () => {
+    // Best-effort: tell the server to invalidate the session + clear httpOnly cookies
     try { await authApi.logout(); } catch {}
+
+    // Wipe all client-side state
     clearUser();
-    router.push(`/${locale}/login`);
+    usePlayerStore.getState().clearPlayer();
+    useQueueStore.getState().clearQueue();
+
+    // Hard navigation instead of router.push so that:
+    // 1. The middleware re-evaluates the cookie state from scratch
+    // 2. All React module-level singletons (Audio element, Zustand) are reset
+    // 3. The auth-already-logged-in middleware guard never sees a stale cookie
+    window.location.href = `/${locale}/login`;
   };
 
   const initials = user?.name
