@@ -25,6 +25,9 @@ import { ArtistProfileModule } from './modules/artist-profile/artist-profile.mod
 import { SongsModule } from './modules/songs/songs.module';
 import { AlbumsModule } from './modules/albums/albums.module';
 import { GenresModule } from './modules/genres/genres.module';
+import { AuditModule } from './modules/audit/audit.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -95,6 +98,11 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     SongsModule,
     AlbumsModule,
     GenresModule,
+
+    // ── Phase 4B: Admin Approval & Moderation ─────────────────────────────
+    AuditModule,
+    NotificationsModule,
+    AdminModule,
   ],
   providers: [
     // Global rate limiting

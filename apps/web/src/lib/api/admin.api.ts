@@ -1,47 +1,55 @@
 import apiClient from './axios';
-import type { PremiumType } from '@mymusic/types';
+
+export interface GenreSuggestion {
+  id: string;
+  userId: string;
+  songId: string | null;
+  name: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+}
 
 export const adminApi = {
-  // L1: Dashboard stats
-  getDashboardStats: () =>
-    apiClient.get('/admin/stats'),
+  // ── D5: Song approval queue ────────────────────────────────────────────────
 
-  // L3: User management
+  getSongQueue: () =>
+    apiClient.get('/admin/songs'),
+
+  approveSong: (songId: string) =>
+    apiClient.patch(`/admin/songs/${songId}/approve`),
+
+  rejectSong: (songId: string, reason: string) =>
+    apiClient.patch(`/admin/songs/${songId}/reject`, { reason }),
+
+  requestReupload: (songId: string, notes: string) =>
+    apiClient.patch(`/admin/songs/${songId}/reupload-required`, { notes }),
+
+  restoreSong: (songId: string) =>
+    apiClient.patch(`/admin/songs/${songId}/restore`),
+
+  // ── L2: Genre suggestion management ───────────────────────────────────────
+
+  getGenreSuggestions: () =>
+    apiClient.get<{ data: GenreSuggestion[] }>('/admin/genres/suggestions'),
+
+  approveGenreSuggestion: (suggestionId: string) =>
+    apiClient.patch(`/admin/genres/suggestions/${suggestionId}/approve`),
+
+  rejectGenreSuggestion: (suggestionId: string, notes?: string) =>
+    apiClient.patch(`/admin/genres/suggestions/${suggestionId}/reject`, { notes }),
+
+  // ── L3: User management (Phase 9) ─────────────────────────────────────────
+
   getUsers: (params?: { page?: number; limit?: number; search?: string }) =>
     apiClient.get('/admin/users', { params }),
 
   getUser: (userId: string) =>
     apiClient.get(`/admin/users/${userId}`),
 
-  grantPremium: (userId: string, dto: { premiumType: PremiumType; reason: string }) =>
-    apiClient.post(`/admin/users/${userId}/premium`, dto),
+  // ── L5: Audit log (Phase 9) ────────────────────────────────────────────────
 
-  revokePremium: (userId: string, dto: { reason: string }) =>
-    apiClient.delete(`/admin/users/${userId}/premium`, { data: dto }),
-
-  getUserSessions: (userId: string) =>
-    apiClient.get(`/admin/users/${userId}/sessions`),
-
-  revokeUserSession: (userId: string, sessionId: string) =>
-    apiClient.delete(`/admin/users/${userId}/sessions/${sessionId}`),
-
-  // D5: Song approval queue
-  getPendingSongs: (page = 1, limit = 20) =>
-    apiClient.get('/admin/songs/pending', { params: { page, limit } }),
-
-  approveSong: (songId: string) =>
-    apiClient.post(`/admin/songs/${songId}/approve`),
-
-  rejectSong: (songId: string, reason: string) =>
-    apiClient.post(`/admin/songs/${songId}/reject`, { reason }),
-
-  requestReupload: (songId: string, notes: string) =>
-    apiClient.post(`/admin/songs/${songId}/request-reupload`, { notes }),
-
-  restoreSong: (songId: string) =>
-    apiClient.post(`/admin/songs/${songId}/restore`),
-
-  // L5: Audit log
   getAuditLogs: (params?: {
     page?: number;
     limit?: number;

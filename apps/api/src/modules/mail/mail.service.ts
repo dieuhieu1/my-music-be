@@ -77,4 +77,29 @@ export class MailService {
 <p>Your My Music Premium subscription has been deactivated.</p>
 <p>Your downloaded tracks are no longer available for offline listening.</p>`;
   }
+
+  songApprovedEmail(songTitle: string): string {
+    return `<h2>Your song has been approved!</h2>
+<p><strong>${songTitle}</strong> has been reviewed and approved by our team.</p>
+<p>It is now live on My Music for listeners to enjoy.</p>`;
+  }
+
+  songRejectedEmail(songTitle: string, reason: string): string {
+    return `<h2>Song Review Update</h2>
+<p>Unfortunately, <strong>${songTitle}</strong> did not pass our review process.</p>
+<p><strong>Reason:</strong> ${reason}</p>
+<p>If you believe this decision was made in error, please contact support.</p>`;
+  }
+
+  songReuploadRequiredEmail(songTitle: string, notes: string): string {
+    return `<h2>Action Required: Re-upload Your Song</h2>
+<p>Our team has reviewed <strong>${songTitle}</strong> and requires changes before it can go live.</p>
+<p><strong>Notes from reviewer:</strong> ${notes}</p>
+<p>Please log in to your dashboard to re-upload the corrected file.</p>`;
+  }
+
+  songRestoredEmail(songTitle: string): string {
+    return `<h2>Song Restored</h2>
+<p><strong>${songTitle}</strong> has been restored and is now live again on My Music.</p>`;
+  }
 }

@@ -12,6 +12,7 @@ export interface Song {
   status: string;
   dropAt: string | null;
   reuploadReason: string | null;
+  rejectionReason: string | null;
   listenCount: number;
   createdAt: string;
   updatedAt: string;
@@ -47,10 +48,8 @@ export const songsApi = {
   getSongTeaser: (id: string) =>
     apiClient.get(`/songs/${id}/teaser`),
 
-  resubmitSong: (id: string, formData: FormData) =>
-    apiClient.patch(`/songs/${id}/resubmit`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }),
+  resubmitSong: (id: string, dto: { title?: string; genreIds?: string[]; dropAt?: string }) =>
+    apiClient.patch(`/songs/${id}/resubmit`, dto),
 
   likeSong: (id: string) =>
     apiClient.post(`/songs/${id}/like`),

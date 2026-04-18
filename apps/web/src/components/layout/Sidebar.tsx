@@ -19,6 +19,9 @@ import {
   UserCircle2,
   LogOut,
   Disc,
+  Tags,
+  ClipboardList,
+  LayoutDashboard,
 } from 'lucide-react';
 import { authApi } from '@/lib/api/auth.api';
 import { useRouter } from 'next/navigation';
@@ -28,6 +31,7 @@ interface NavItem {
   href: string;
   label: string;
   Icon: React.ElementType;
+  exact?: boolean;
 }
 
 const listenerItems: NavItem[] = [
@@ -45,6 +49,13 @@ const artistItems: NavItem[] = [
   { href: '/artist/albums',    label: 'My Albums',     Icon: Disc      },
   { href: '/artist/analytics', label: 'Analytics',     Icon: BarChart2 },
   { href: '/artist/drops',     label: 'Live Drops',    Icon: Radio     },
+];
+
+const adminItems: NavItem[] = [
+  { href: '/admin',         label: 'Dashboard',  Icon: LayoutDashboard, exact: true },
+  { href: '/admin/songs',   label: 'Song Queue', Icon: Library          },
+  { href: '/admin/genres',  label: 'Genres',     Icon: Tags             },
+  { href: '/admin/audit',   label: 'Audit Log',  Icon: ClipboardList    },
 ];
 
 // ── Single nav item ────────────────────────────────────────────────────────
@@ -114,8 +125,10 @@ export default function Sidebar() {
   const isArtist = hasRole(Role.ARTIST);
   const isAdmin  = hasRole(Role.ADMIN);
 
-  const active = (href: string) =>
-    pathname === `/${locale}${href}` || pathname.startsWith(`/${locale}${href}/`);
+  const active = (href: string, exact = false) =>
+    exact
+      ? pathname === `/${locale}${href}`
+      : pathname === `/${locale}${href}` || pathname.startsWith(`/${locale}${href}/`);
 
   const handleLogout = async () => {
     try { await authApi.logout(); } catch {}
@@ -217,12 +230,18 @@ export default function Sidebar() {
           <>
             <div style={{ height: 1, background: '#141414', margin: '8px 16px' }} />
             <SectionHeader label="Admin" />
-            <NavLink
-              href={`/${locale}/admin`}
-              label="Dashboard"
-              Icon={Shield}
-              active={active('/admin')}
-            />
+            {adminItems.map((item, i) => (
+              <div key={item.href} style={{
+                animation: `slideNav 0.35s cubic-bezier(0.16,1,0.3,1) both`,
+                animationDelay: `${(i + listenerItems.length + artistItems.length) * 0.04}s`,
+              }}>
+                <NavLink
+                  {...item}
+                  href={`/${locale}${item.href}`}
+                  active={active(item.href, item.exact)}
+                />
+              </div>
+            ))}
           </>
         )}
       </nav>

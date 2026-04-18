@@ -20,6 +20,7 @@ import { memoryStorage } from 'multer';
 import { SongsService } from './songs.service';
 import { UploadSongDto } from './dto/upload-song.dto';
 import { UpdateSongDto } from './dto/update-song.dto';
+import { ResubmitSongDto } from './dto/resubmit-song.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -109,6 +110,19 @@ export class SongsController {
     @UploadedFiles() files?: { coverArt?: Express.Multer.File[] },
   ) {
     return this.songsService.update(userId, songId, dto, files?.coverArt?.[0]);
+  }
+
+  // ── PATCH /songs/:id/resubmit (BL-85) ────────────────────────────────────
+
+  @Patch(':id/resubmit')
+  @UseGuards(RolesGuard)
+  @Roles(Role.ARTIST)
+  resubmit(
+    @CurrentUser('id') userId: string,
+    @Param('id', ParseUUIDPipe) songId: string,
+    @Body() dto: ResubmitSongDto,
+  ) {
+    return this.songsService.resubmit(userId, songId, dto);
   }
 
   // ── DELETE /songs/:id ─────────────────────────────────────────────────────

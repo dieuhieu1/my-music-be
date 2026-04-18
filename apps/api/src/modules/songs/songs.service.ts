@@ -23,6 +23,7 @@ import { AlbumsService } from '../albums/albums.service';
 import { QUEUE_NAMES } from '../queue/queue.constants';
 import { UploadSongDto } from './dto/upload-song.dto';
 import { UpdateSongDto } from './dto/update-song.dto';
+import { ResubmitSongDto } from './dto/resubmit-song.dto';
 import { SongStatus } from '../../common/enums';
 
 // ── Audio magic-byte helpers ─────────────────────────────────────────────────
@@ -217,10 +218,11 @@ export class SongsService {
         await this.albumsService.recomputeAlbumStats(manager, dto.albumId);
       }
 
-      // Optional genre suggestion
+      // Optional genre suggestion — link songId for retroactive bulk-tagging (BL-49)
       if (dto.suggestGenre?.trim()) {
         const suggestion = manager.create(GenreSuggestion, {
           userId,
+          songId,
           name: dto.suggestGenre.trim(),
         });
         await manager.save(suggestion);
@@ -385,10 +387,33 @@ export class SongsService {
       status: song.status,
       dropAt: song.dropAt,
       reuploadReason: song.reuploadReason,
+      rejectionReason: song.rejectionReason,
       listenCount: song.listenCount,
       createdAt: song.createdAt,
       updatedAt: song.updatedAt,
     };
+  }
+
+  // ── PATCH /songs/:id/resubmit (BL-85) ────────────────────────────────────
+
+  async resubmit(userId: string, songId: string, dto: ResubmitSongDto) {
+    const song = await this.songs.findOne({ where: { id: songId } });
+    if (!song) throw new NotFoundException('Song not found');
+    if (song.userId !== userId) throw new ForbiddenException('Not your song');
+
+    if (song.status !== SongStatus.REUPLOAD_REQUIRED) {
+      throw new BadRequestException('Song is not in REUPLOAD_REQUIRED status');
+    }
+
+    if (dto.title !== undefined) song.title = dto.title;
+    if (dto.genreIds !== undefined) song.genreIds = dto.genreIds;
+    if (dto.dropAt !== undefined) song.dropAt = dto.dropAt ? new Date(dto.dropAt) : null;
+
+    song.status = SongStatus.PENDING;
+    song.reuploadReason = null;
+
+    await this.songs.save(song);
+    return this.buildSongResponse(song);
   }
 
   // ── List songs for the current artist ────────────────────────────────────

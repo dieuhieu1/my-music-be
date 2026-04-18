@@ -25,6 +25,11 @@ export class GenreSuggestion {
   @JoinColumn({ name: 'user_id' })
   user: User;
 
+  // The song this suggestion was submitted with — used for retroactive bulk-tagging (BL-49)
+  @Index()
+  @Column({ name: 'song_id', nullable: true })
+  songId: string | null;
+
   @Column({ length: 100 })
   name: string;
 

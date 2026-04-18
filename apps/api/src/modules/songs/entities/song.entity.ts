@@ -69,6 +69,10 @@ export class Song {
   @Column({ name: 'reupload_reason', type: 'text', nullable: true })
   reuploadReason: string | null;
 
+  // Admin-supplied reason for rejection (Phase 4B — BL-37)
+  @Column({ name: 'rejection_reason', type: 'text', nullable: true })
+  rejectionReason: string | null;
+
   @Column({ name: 'listen_count', default: 0 })
   listenCount: number;
 
