@@ -11,7 +11,11 @@
       "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/artist/songs/\\\\[id\\\\]/page.tsx)",
       "Bash(cat C:/Users/FPT-HIEU/Desktop/my-music/apps/web/src/app/[locale]/\\\\\\(app\\\\\\)/artist/edit/page.tsx)",
       "Bash(xargs cat *)",
-      "Bash(cat *)"
+      "Bash(cat *)",
+      "Skill(agent-browser)",
+      "Bash(netstat -ano)",
+      "Bash(npx turbo *)",
+      "Bash(echo \"PID=$!\")"
     ]
   }
 }

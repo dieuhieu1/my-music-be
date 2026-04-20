@@ -6,7 +6,9 @@ import { useParams } from 'next/navigation';
 import { usersApi, type PublicUser } from '@/lib/api/users.api';
 import { useAuthStore } from '@/store/useAuthStore';
 import FollowButton from '@/components/profile/FollowButton';
-import { Users, UserCheck, Music2 } from 'lucide-react';
+import { Users, UserCheck, Music2, ListMusic } from 'lucide-react';
+import { playlistsApi, type Playlist } from '@/lib/api/playlists.api';
+import { PlaylistCard } from '@/components/music/PlaylistCard';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,8 @@ export default function PublicUserProfilePage() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [loadingMore, setLoadingMore]       = useState(false);
   const [followerCount, setFollowerCount]   = useState(0);
+  const [playlists, setPlaylists]           = useState<Playlist[]>([]);
+  const [playlistsTotal, setPlaylistsTotal] = useState(0);
 
   // ── Initial parallel fetch ──────────────────────────────────────────────────
   useEffect(() => {
@@ -73,15 +77,19 @@ export default function PublicUserProfilePage() {
     Promise.all([
       usersApi.getUser(id),
       usersApi.getFollowing(id, 1, 20),
+      playlistsApi.getUserPlaylists(id, 1, 6),
     ])
-      .then(([userRes, followingRes]) => {
+      .then(([userRes, followingRes, playlistsRes]) => {
         const u = (userRes.data as any).data   ?? userRes.data;
         const f = (followingRes.data as any).data ?? followingRes.data;
+        const p = (playlistsRes.data as any)?.data ?? playlistsRes.data;
         setProfile(u);
         setFollowerCount(u.followerCount ?? 0);
         setFollowing(f.items ?? []);
         setFollowingTotal(f.total ?? 0);
         setFollowingPage(1);
+        setPlaylists(p?.items ?? []);
+        setPlaylistsTotal(p?.total ?? 0);
       })
       .catch(() => {})
       .finally(() => setLoadingProfile(false));
@@ -391,7 +399,7 @@ export default function PublicUserProfilePage() {
       {/* ── Following section ────────────────────────────────────────────────── */}
       <div
         className="anim-fade-up anim-fade-up-6"
-        style={{ margin: '20px 24px 40px' }}
+        style={{ margin: '20px 24px 0' }}
       >
         {/* Section header */}
         <div style={{
@@ -554,6 +562,38 @@ export default function PublicUserProfilePage() {
           </button>
         )}
       </div>
+
+      {/* ── Public Playlists section ──────────────────────────────────────── */}
+      {playlists.length > 0 && (
+        <div
+          className="anim-fade-up anim-fade-up-7"
+          style={{ margin: '20px 24px 60px' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <ListMusic size={14} style={{ color: 'var(--gold)' }} />
+            <p style={{
+              fontSize: '0.63rem', letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: 'var(--gold)',
+            }}>
+              Public Playlists
+              {playlistsTotal > 0 && (
+                <span style={{ color: 'var(--muted-text)', marginLeft: 6 }}>
+                  ({playlistsTotal})
+                </span>
+              )}
+            </p>
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
+            gap: 14,
+          }}>
+            {playlists.map((pl, i) => (
+              <PlaylistCard key={pl.id} playlist={pl} index={i} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

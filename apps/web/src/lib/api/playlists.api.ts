@@ -1,5 +1,38 @@
 import apiClient from './axios';
 
+export interface PlaylistSongItem {
+  playlistSongId: string;
+  position: number;
+  addedAt: string;
+  id: string;
+  title: string;
+  artistName: string | null;
+  duration: number | null;
+  coverArtUrl: string | null;
+  bpm: number | null;
+  camelotKey: string | null;
+  status: string;
+  isTakenDown: boolean;
+}
+
+export interface Playlist {
+  id: string;
+  userId: string;
+  title: string;
+  description: string | null;
+  coverArtUrl: string | null;
+  isPublic: boolean;
+  isLikedSongs: boolean;
+  totalTracks: number;
+  totalHours: number;
+  listenerCount: number;
+  createdAt: string;
+  updatedAt: string;
+  // Detail view only
+  isSaved?: boolean;
+  songs?: PlaylistSongItem[];
+}
+
 export const playlistsApi = {
   getPlaylists: (page = 1, limit = 20) =>
     apiClient.get('/playlists', { params: { page, limit } }),
@@ -7,13 +40,11 @@ export const playlistsApi = {
   getPlaylist: (id: string) =>
     apiClient.get(`/playlists/${id}`),
 
-  createPlaylist: (dto: { title: string; description?: string; coverArtUrl?: string }) =>
+  createPlaylist: (dto: { title: string; description?: string; isPublic?: boolean }) =>
     apiClient.post('/playlists', dto),
 
-  updatePlaylist: (
-    id: string,
-    dto: { title?: string; description?: string; coverArtUrl?: string },
-  ) => apiClient.patch(`/playlists/${id}`, dto),
+  updatePlaylist: (id: string, dto: { title?: string; description?: string; isPublic?: boolean }) =>
+    apiClient.patch(`/playlists/${id}`, dto),
 
   deletePlaylist: (id: string) =>
     apiClient.delete(`/playlists/${id}`),
@@ -23,9 +54,6 @@ export const playlistsApi = {
 
   removeSong: (playlistId: string, songId: string) =>
     apiClient.delete(`/playlists/${playlistId}/songs/${songId}`),
-
-  reorderSongs: (playlistId: string, songId: string, newPosition: number) =>
-    apiClient.patch(`/playlists/${playlistId}/songs/${songId}/position`, { newPosition }),
 
   savePlaylist: (id: string) =>
     apiClient.post(`/playlists/${id}/save`),
@@ -37,5 +65,8 @@ export const playlistsApi = {
     apiClient.get('/playlists/saved', { params: { page, limit } }),
 
   getLikedSongs: () =>
-    apiClient.get('/playlists/liked-songs'),
+    apiClient.get('/playlists/liked'),
+
+  getUserPlaylists: (userId: string, page = 1, limit = 20) =>
+    apiClient.get('/playlists', { params: { userId, page, limit } }),
 };
