@@ -14,6 +14,7 @@ import { minioConfig } from './config/minio.config';
 import { jwtConfig } from './config/jwt.config';
 import { throttlerConfig } from './config/throttler.config';
 import { dspConfig } from './config/dsp.config';
+import { paymentConfig } from './config/payment.config';
 
 import { HealthModule } from './modules/health/health.module';
 import { StorageModule } from './modules/storage/storage.module';
@@ -32,6 +33,8 @@ import { PlaybackModule } from './modules/playback/playback.module';
 import { SearchModule } from './modules/search/search.module';
 import { PlaylistsModule } from './modules/playlists/playlists.module';
 import { FeedModule } from './modules/feed/feed.module';
+import { DownloadsModule } from './modules/downloads/downloads.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -39,7 +42,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     // ── Config (global) ────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, redisConfig, minioConfig, jwtConfig, throttlerConfig, dspConfig],
+      load: [databaseConfig, redisConfig, minioConfig, jwtConfig, throttlerConfig, dspConfig, paymentConfig],
       envFilePath: '.env',
     }),
 
@@ -97,6 +100,12 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     // ── Phase 3: User & Artist Profiles ───────────────────────────────────
     UsersModule,
     ArtistProfileModule,
+
+    // ── Phase 7: Payments & Premium Downloads ─────────────────────────────
+    // DownloadsModule registered BEFORE SongsModule: Express resolves
+    // GET /songs/downloads before GET /songs/:songId (route order matters)
+    DownloadsModule,
+    PaymentsModule,
 
     // ── Phase 4A: Content Upload & DSP Processing ──────────────────────────
     SongsModule,

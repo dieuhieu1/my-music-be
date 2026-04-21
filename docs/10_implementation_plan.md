@@ -39,6 +39,17 @@
 
 **Entities in DB (phases 1–6):** `users`, `user_roles`, `sessions`, `password_resets`, `verification_codes`, `artist_profiles`, `follows`, `user_genre_preferences`, `songs`, `song_encryption_keys`, `song_daily_stats`, `albums`, `album_songs`, `genres`, `genre_suggestions`, `audit_logs`, `playback_history`, `playback_state`, `queue_items`, `playlists`, `playlist_songs`, `saved_playlists`, `feed_events`
 
+**Global conventions (apply to every phase):**
+
+- **Response envelope:** all endpoints return `{ success: true, data: {...} }` or `{ success: false, data: null, error: { code, message } }` via `TransformInterceptor`
+- **Pagination shape:** `{ items: [...], total, page, size, totalPages }`
+- **Guard order:** `JwtAuthGuard → EmailVerifiedGuard → RolesGuard → Controller → Service (BL-50 ownership check)`
+- **Ownership check (BL-50):** always in service layer — `if (resource.userId !== currentUser.id && !isAdmin) throw ForbiddenException`
+- **Auth cookies:** `access_token` httpOnly 15 min · `refresh_token` httpOnly 30 days; JWT denylist in Redis on logout
+- **`song_encryption_keys` table:** one row per song; `encryptedAesKey` = AES-256-CBC key encrypted with `AES_MASTER_KEY` env var; needed in Phase 7 download endpoint to build licenseJwt
+- **Role `PREMIUM`:** stored as a row in `user_roles` join table (same as USER/ARTIST/ADMIN); checked via `@Roles('PREMIUM')` guard
+- **NotificationType enum values:** `UPCOMING_DROP`, `NEW_RELEASE`, `SONG_LIKED`, `ARTIST_FOLLOWED`, `SONG_TAKEN_DOWN`, `PREMIUM_ACTIVATED`, `DROP_CANCELLED`
+
 ---
 
 ## Phase 7 — Payments & Premium Downloads 🔄 CURRENT
@@ -67,18 +78,24 @@
 
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| GET | `/payment/vn-pay?premiumType=` | JWT | Build HMAC-SHA512 URL; create PaymentRecord PENDING; return `{ paymentUrl }` |
-| GET | `/payment/vn-pay/callback` | @Public | Verify `vnp_SecureHash`; set SUCCESS; add PREMIUM role; compute expiresAt; send email |
-| GET | `/payment/momo?premiumType=` | JWT | MoMo HMAC-SHA256 request; return `{ paymentUrl }` |
-| POST | `/payment/momo/callback` | @Public | Verify HMAC-SHA256; same grant flow as VNPay |
-| POST | `/admin/users/:userId/premium` | ADMIN | Manual grant; body `{ premiumType }`; ADMIN_GRANTED provider |
+| GET | `/payment/vn-pay?premiumType=` | JWT | Build HMAC-SHA512 URL (env: `VNPAY_HASH_SECRET`); include `vnp_ReturnUrl=<API_BASE>/payment/vn-pay/callback`; create PaymentRecord PENDING; return `{ paymentUrl }` |
+| GET | `/payment/vn-pay/callback` | @Public | Verify `vnp_SecureHash` HMAC-SHA512; idempotent (skip if PaymentRecord already SUCCESS); set SUCCESS; add PREMIUM role; compute expiresAt; send email |
+| POST | `/payment/momo?premiumType=` | JWT | POST to MoMo endpoint with HMAC-SHA256 (env: `MOMO_SECRET_KEY`); `redirectUrl=<API_BASE>/payment/momo/callback`; return `{ paymentUrl }` — **note: client calls our API via POST; our API calls MoMo internally** |
+| POST | `/payment/momo/callback` | @Public | Verify HMAC-SHA256; idempotent; same grant flow as VNPay |
+| POST | `/admin/users/:userId/premium` | ADMIN | Manual grant; body `{ premiumType }`; expiresAt = now + duration map (1month=30d, 3month=90d, 6month=180d, 12month=365d); ADMIN_GRANTED provider |
 | DELETE | `/admin/users/:userId/premium` | ADMIN | Revoke PREMIUM role + cascade revokedAt on all DownloadRecords |
 | POST | `/songs/:songId/download` | PREMIUM\|ADMIN | Quota check (USER 100, ARTIST 200, ADMIN ∞); build licenseJwt; 5-min presigned `.enc` URL; insert DownloadRecord |
 | GET | `/songs/downloads` | JWT | List non-revoked DownloadRecords `{ songId, title, downloadedAt, expiresAt }` |
 | POST | `/songs/downloads/revalidate` | JWT | Batch check PREMIUM active; set revokedAt where lapsed (BL-55) |
 | DELETE | `/songs/downloads/:songId` | JWT | Set revokedAt=now (manual remove) |
 
-**licenseJwt payload:** `{ songId, userId, aesKey, expiresAt: now+30d }` signed with `HMAC(userId+serverSecret)`
+**licenseJwt construction:**
+1. Fetch `song_encryption_keys.encryptedAesKey` for the song
+2. Decrypt with `AES_MASTER_KEY` env var → raw `aesKey` (hex string) + `iv` (first 16 bytes stored alongside key, or derived as `sha256(songId+userId)[:16]` — must be consistent with FE decrypt)
+3. Sign with `JWT.sign({ songId, userId, aesKey, iv, expiresAt: now+30d }, env.DOWNLOAD_JWT_SECRET, { algorithm: 'HS256' })`
+4. `DOWNLOAD_JWT_SECRET` = separate env var (not the auth JWT secret)
+
+**AES-256-CBC IV storage decision:** IV is generated at upload time (Phase 4A) and stored in `song_encryption_keys.iv` (hex, 32 chars). Include `iv` in licenseJwt payload so FE can decrypt without a second API call.
 
 ### Frontend
 
@@ -94,7 +111,7 @@
 
 **Other:**
 - `PremiumBadge.tsx` — in header when `user.isPremium`
-- `lib/utils/crypto.ts` — `crypto.subtle.importKey` + `crypto.subtle.decrypt` (AES-256-CBC)
+- `lib/utils/crypto.ts` — decrypt flow: `base64url-decode(aesKey) → crypto.subtle.importKey('raw', keyBuf, 'AES-CBC', false, ['decrypt']) → crypto.subtle.decrypt({ name:'AES-CBC', iv: hex2buf(iv) }, key, encryptedBuf) → Blob → object URL → audio.src`
 - `SongContextMenu` download option: only visible when `user.isPremium`
 
 ### Jobs / Cron
@@ -129,6 +146,19 @@
 |--------|-----------|
 | `notifications` | userId FK, type (NotificationType), payload JSON, readAt nullable, createdAt |
 | `drop_notifications` | userId FK, songId FK; unique (userId, songId) — opt-in |
+
+**`songs` entity additions (Phase 8):** `teaserText VARCHAR(280) nullable` — artist-written teaser copy shown on I1 before drop fires. Set via `PATCH /songs/:songId` (existing edit endpoint).
+
+**`dropAt` validation rules (BL-59):** min = now+1h · max = now+90d · must be validated on both upload (`POST /songs/upload`) and edit (`PATCH /songs/:songId`).
+
+**Status transition for drops:**
+```
+Admin approves song WITH dropAt set → status = SCHEDULED (not LIVE)
+Admin approves song WITHOUT dropAt  → status = LIVE
+SCHEDULED song at dropAt (cron)     → status = LIVE
+Artist cancels drop                 → status = APPROVED (back to pre-drop approved state)
+Artist reschedules (2nd time)       → status = PENDING (requires re-approval)
+```
 
 ### API Endpoints
 
@@ -308,6 +338,13 @@ Files: `ai.module.ts`, `ai.controller.ts`, `ai.service.ts`, `skills.dispatcher.t
 | `0 2 * * *` (daily 2AM) | BL-35 | Batch worker: score all LIVE songs per active user; upsert top-200 to recommendation_cache; invalidate `recs:{userId}` |
 
 **Score formula:** `genreMatch×0.4 + followerBoost×0.3 + recencyBoost×0.2 + novelty×0.1`
+
+| Term | Definition |
+|------|-----------|
+| `genreMatch` | 1.0 if song's genreId in user's top-3 genres, else 0 |
+| `followerBoost` | `min(1, artist.followerCount / 10000)` — normalised popularity signal |
+| `recencyBoost` | 1.0 if song uploaded within last 14d, 0.5 if within 30d, else 0 |
+| `novelty` | 1 − `min(1, userPlayCount / 5)` — penalises songs user already heard ≥5 times |
 
 ### Test Checklist
 

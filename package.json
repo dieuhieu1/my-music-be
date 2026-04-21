@@ -25,5 +25,10 @@
     "test:phase7": "npm run test:api:phase7 --workspace=tests && npm run test:e2e:phase7 --workspace=tests",
     "test:phase8": "npm run test:api:phase8 --workspace=tests && npm run test:e2e:phase8 --workspace=tests",
     "test:phase9": "npm run test:api:phase9 --workspace=tests && npm run test:e2e:phase9 --workspace=tests"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2"
   }
 }
