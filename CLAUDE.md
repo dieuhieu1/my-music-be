@@ -31,7 +31,7 @@ Sub-apps have their own `CLAUDE.md`:
 |---------|------|-------|
 | NestJS API | 3001 | `/api/v1` prefix |
 | Next.js | 3000 | locale-prefixed routes |
-| Python DSP | 8000 | `GET /health`, `POST /extract` |
+| Python DSP | 5000 | `GET /health`, `POST /extract` |
 | PostgreSQL | 5432 | TypeORM |
 | Redis | 6379 | BullMQ + cache + JWT denylist |
 | MinIO | 9000/9001 | S3 buckets: `audio`, `audio-enc`, `images` |
@@ -130,7 +130,7 @@ MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
 JWT_SECRET=...
 JWT_REFRESH_SECRET=...
-DSP_URL=http://dsp:8000
+DSP_URL=http://dsp:5000
 ANTHROPIC_API_KEY=sk-ant-...
 VNPAY_HASH_SECRET=...
 MOMO_SECRET_KEY=...
@@ -153,13 +153,20 @@ SMTP_PORT=1025
 
 ---
 
-## Docs Reference
+## Reference Docs
 
-| File | Content |
-|------|---------|
-| `docs/01_requirements_en.md` | All 85 BL codes with full descriptions |
-| `docs/02_specification.md` | All 58 screens (A1–L6) with role access matrix |
-| `docs/07_api_interfaces.md` | Every endpoint with request/response types |
-| `docs/10_implementation_plan.md` | Phase-by-phase BE + DSP + FE implementation guide |
+Read the CLAUDE.md files first. Only open a doc when it answers something the CLAUDE.md can't.
 
-**Only read a doc if the CLAUDE.md files don't answer your question.**
+| Doc | Read when… |
+|-----|-----------|
+| `docs/01_requirements_en.md` | You need the exact wording of a BL code (e.g. BL-34, BL-52) |
+| `docs/02_specification.md` | You need screen-level detail: which role can see what, modal vs page |
+| `docs/04_architecture.md` | You need data-flow or system-design decisions (MinIO buckets, auth flow, SmartOrder algo) |
+| `docs/05_module_map.md` | You need to know which NestJS module owns a BL code |
+| `docs/06_project_structure.md` | You need the exact file/folder path for a new file |
+| `docs/07_api_interfaces.md` | You need the full request/response shape for a specific endpoint |
+| `docs/08_ai_architecture.md` | You're implementing the AI chat agent (Phase 10) |
+| `docs/09_recommendation_engine.md` | You're implementing next-song recommendation or mood engine (Phase 10) |
+| `docs/10_implementation_plan.md` | You're starting a new phase — read **only that phase's section** |
+
+**Rule**: look up one doc, extract what you need, then close it. Never read all docs upfront.

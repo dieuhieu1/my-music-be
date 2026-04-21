@@ -1,248 +1,191 @@
-# apps/dsp — Python DSP Sidecar CLAUDE.md
+## Project Overview
 
-FastAPI + librosa audio feature extraction sidecar. Port 8000.
+**Purpose**: Stateless HTTP sidecar — receives a presigned MinIO URL, downloads the audio, and returns BPM, Camelot key, energy score, and duration. Called exclusively by the NestJS `AudioExtractionWorker` (BullMQ job `extract-metadata`). Never called by the frontend.
 
-Read `../../CLAUDE.md` first for project-level context.
+**Domain**: Audio signal processing (music metadata extraction).
 
----
-
-## What This Service Does
-
-Single responsibility: **receive a presigned MinIO audio URL → return BPM, Camelot Key, Energy**.
-
-Called exclusively by the NestJS `AudioExtractionWorker` after song upload. Never called by the frontend directly.
+**Tech stack**: Python 3.11 · FastAPI 0.111 · librosa 0.10.2 · soundfile 0.12 · NumPy 1.26 · uvicorn.
 
 ---
 
-## File Structure
+## Folder Structure
 
 ```
 apps/dsp/
-  main.py           — FastAPI app, endpoints
-  extract.py        — Core librosa extraction logic
-  requirements.txt  — Python dependencies
-  Dockerfile        — python:3.11-slim image
+  main.py          — FastAPI app, request/response models, two endpoints
+  extract.py       — All DSP logic (download → load → BPM/key/energy/duration)
+  requirements.txt — Pinned Python deps
+  Dockerfile       — python:3.11-slim + libsndfile1 + ffmpeg; exposes :5000
 ```
 
 ---
 
-## Endpoints
+## Processing Pipeline
 
-### `GET /health`
 ```
-Response: 200 { "status": "ok" }
-Purpose: Docker health check, NestJS startup check
-```
-
-### `POST /extract`
-```
-Request:  { "audioUrl": "<presigned MinIO URL>" }
-Response: { "bpm": 128.0, "camelotKey": "8B", "energy": 72.4 }
-Errors:   422 { "detail": "<reason>" }  — NestJS treats as soft failure (leaves bpm=null)
-Timeout:  caller sets 120s max; internal requests.get timeout=60s
-```
-
----
-
-## Implementation (`extract.py`)
-
-### CAMELOT_MAP
-
-```python
-# Maps pitch class (0=C, 1=C#, ..., 11=B) to Camelot Wheel notation
-CAMELOT_MAJOR = {
-    0: "8B",  1: "3B",  2: "10B", 3: "5B",
-    4: "12B", 5: "7B",  6: "2B",  7: "9B",
-    8: "4B",  9: "11B", 10: "6B", 11: "1B",
-}
-CAMELOT_MINOR = {k: v.replace("B", "A") for k, v in CAMELOT_MAJOR.items()}
-```
-
-### Full extract() function
-
-```python
-import io
-import requests
-import librosa
-import numpy as np
-
-def extract(audio_url: str) -> dict:
-    # 1. Download audio from presigned MinIO URL
-    r = requests.get(audio_url, timeout=60)
-    r.raise_for_status()
-
-    # 2. Load into librosa (mono, 22050 Hz, max 300s to avoid memory OOM)
-    y, sr = librosa.load(io.BytesIO(r.content), sr=22050, mono=True, duration=300)
-
-    # 3. BPM — beat_track returns array in newer librosa; use atleast_1d
-    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    bpm = round(float(np.atleast_1d(tempo)[0]), 1)
-
-    # 4. Camelot Key
-    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    pitch_class = int(chroma.mean(axis=1).argmax())
-    y_harm, _ = librosa.effects.hpss(y)           # separate harmonic component
-    tonnetz = librosa.feature.tonnetz(y=y_harm, sr=sr)
-    is_minor = float(tonnetz[1].mean()) < 0        # negative 5th axis = minor tendency
-    camelot_key = CAMELOT_MINOR[pitch_class] if is_minor else CAMELOT_MAJOR[pitch_class]
-
-    # 5. Energy (0–100 scale)
-    rms = float(librosa.feature.rms(y=y).mean())
-    centroid = float(librosa.feature.spectral_centroid(y=y, sr=sr).mean())
-    energy = round(min(100.0, (rms * 200) + (centroid / 200)), 1)
-
-    return {"bpm": bpm, "camelotKey": camelot_key, "energy": energy}
-```
-
-### main.py
-
-```python
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-from extract import extract
-
-app = FastAPI(title="MyMusic DSP Sidecar")
-
-class ExtractRequest(BaseModel):
-    audioUrl: str
-
-class ExtractResponse(BaseModel):
-    bpm: Optional[float]
-    camelotKey: Optional[str]
-    energy: Optional[float]
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.post("/extract", response_model=ExtractResponse)
-def extract_endpoint(body: ExtractRequest):
-    try:
-        return extract(body.audioUrl)
-    except Exception as e:
-        raise HTTPException(status_code=422, detail=str(e))
+Presigned MinIO URL (HTTP GET, 60s timeout, stream=True)
+        │
+        ▼
+  io.BytesIO buffer          ← no temp file, all in memory
+        │
+        ▼
+  librosa.load(sr=None, mono=True)
+   ├── y_full, sr  ─────────────────► duration = get_duration(y_full, sr)
+   └── y = y_full[:120s]             (slice for BPM + key analysis)
+        │
+        ├──► BPM          beat_track(y, sr)  → round to 1 decimal
+        ├──► Camelot Key  chroma_cqt → argmax → major/minor heuristic → CAMELOT dict
+        └──► Energy       rms + spectral_centroid → composite score
+        │
+        ▼
+  { bpm, camelotKey, energy, duration }   (JSON response)
 ```
 
 ---
 
-## Requirements
+## Core Algorithms
 
-```
-# requirements.txt
-fastapi==0.111.0
-uvicorn==0.29.0
-librosa==0.10.1
-requests==2.31.0
-soundfile==0.12.1
-numpy==1.26.4
-pydantic==2.7.0
+### BPM (`extract.py:44-45`)
+- **Input**: mono waveform slice (≤120 s, native sr)
+- **Method**: `librosa.beat.beat_track` — onset envelope + dynamic programming tempo estimation
+- **Output**: `float` rounded to 1 decimal; in newer librosa `tempo` is an array → `float(tempo)` unwraps it
+
+### Camelot Key (`extract.py:48-54`)
+- **Input**: same 120 s slice
+- **Method**: Constant-Q chroma (`chroma_cqt`) → mean across time → dominant pitch class = `argmax(chroma_mean)`.
+  Major/minor heuristic: if `chroma_mean[key_idx] > chroma_mean[(key_idx+9)%12]` → major, else minor (relative minor is 9 semitones up).
+- **Lookup**: `CAMELOT: dict[tuple[int, bool], str]` — 24-entry table, key `(pitch_class_0-11, is_major)` → e.g. `(0, True)→"8B"`, `(8, False)→"1A"`. Falls back to `"1A"` on miss.
+- **Output**: Camelot Wheel code string (e.g. `"8B"`, `"5A"`)
+
+### Energy score (`extract.py:57-60`)
+- **Input**: 120 s slice
+- **Method**: `energy = rms * 1000 + spectral_centroid / 10_000` — composite; roughly 0–10+ range (unbounded)
+- **NOT** a 0–100 scale (the old CLAUDE.md was wrong)
+- **Access**: stored in DB, never returned to artist/user (BL-37A); used by mood recommendation engine (BL-36B)
+
+### Duration (`extract.py:37-38`)
+- **Input**: full audio (no 120 s cap)
+- **Method**: `librosa.get_duration(y=y_full, sr=sr)` — frame-accurate
+- **Output**: `float` seconds, rounded to 2 decimals
+
+---
+
+## Data Formats
+
+| Field | Type | Notes |
+|-------|------|-------|
+| Input `audioUrl` | `str` (presigned HTTPS) | MinIO presigned URL, ≥15 min TTL required |
+| Audio load | `sr=None` mono | Preserves native sample rate (NOT forced 22050 Hz) |
+| Analysis window | First 120 s | `y_full[:int(120*sr)]` — avoids memory OOM on long files |
+| `bpm` | `float` | e.g. `128.0` |
+| `camelotKey` | `str` | `"NNL"` format e.g. `"8B"` / `"5A"` |
+| `energy` | `float` | 4 decimal places; unbounded but typically 0.5–8 |
+| `duration` | `float` | Seconds, 2 decimal places |
+
+---
+
+## Key Files
+
+| File | Role |
+|------|------|
+| `extract.py` | All DSP: download, load, BPM, key, energy, duration |
+| `extract.py:20-27` | `CAMELOT` dict — single source of truth for key mapping |
+| `extract.py:30` | `extract_audio_features(audio_url)` — main entry point |
+| `extract.py:37-41` | Full-load for duration + 120s slice strategy |
+| `extract.py:53` | Major/minor heuristic (relative minor = +9 semitones) |
+| `main.py` | FastAPI app — two endpoints, Pydantic models |
+| `main.py:12-20` | `ExtractRequest` / `ExtractResponse` schemas |
+| `main.py:28-34` | `/extract` POST — wraps all exceptions as HTTP 422 |
+| `requirements.txt` | Pinned deps — must stay in sync with Dockerfile |
+| `Dockerfile` | port **5000** (not 8000 — NestJS `DSP_URL` must match) |
+
+---
+
+## Configuration & Parameters
+
+All tuning lives in `extract.py` as inline constants/magic numbers:
+
+| Parameter | Location | Current Value | Effect |
+|-----------|----------|---------------|--------|
+| Analysis window | `extract.py:41` | `120 * sr` seconds | Trade-off accuracy vs CPU |
+| HTTP download timeout | `extract.py:32` | `60` s | Raise if MinIO is slow |
+| Energy RMS weight | `extract.py:60` | `× 1000` | Relative loudness contribution |
+| Energy centroid weight | `extract.py:60` | `÷ 10_000` | Relative brightness contribution |
+| CAMELOT fallback | `extract.py:54` | `"1A"` | Returned when dict miss (shouldn't happen) |
+
+No external config file — all params are hardcoded.
+
+---
+
+## Dependencies & Hardware
+
+| Package | Why |
+|---------|-----|
+| `librosa 0.10.2` | BPM, chroma, RMS, spectral centroid, duration |
+| `soundfile 0.12` | Audio I/O backend for librosa (WAV/FLAC/OGG) |
+| `ffmpeg` (system) | Decodes MP3/AAC/M4A before soundfile |
+| `libsndfile1` (system) | Required by soundfile at runtime |
+| `requests 2.32` | HTTP download of presigned URL |
+| `numpy 1.26` | Array ops on chroma/rms/centroid |
+
+**Hardware**: CPU-only. No GPU needed. A typical 3-min MP3 takes ~1–3 s on a single core. Memory: ~100 MB peak for a 5-min 44.1 kHz file.
+
+---
+
+## Testing & Validation
+
+No test suite currently. Manual validation steps:
+1. Start service: `uvicorn main:app --port 5000 --reload`
+2. Upload a song via NestJS, get a presigned URL, call `POST /extract` with `{"audioUrl":"<url>"}`
+3. Verify BPM against known track (e.g. 128 BPM house track ±2 BPM tolerance)
+4. Verify Camelot key against manual key detection tool (e.g. Mixed In Key)
+5. `GET /health` → `{"status": "ok"}` is the Docker health check
+
+---
+
+## Common Commands
+
+```bash
+# Run locally (from apps/dsp/)
+pip install -r requirements.txt
+uvicorn main:app --host 0.0.0.0 --port 5000 --reload
+
+# Build & run Docker image
+docker build -t my-music-dsp .
+docker run -p 5000:5000 my-music-dsp
+
+# Quick smoke test
+curl http://localhost:5000/health
+curl -X POST http://localhost:5000/extract \
+  -H "Content-Type: application/json" \
+  -d '{"audioUrl":"<presigned-url>"}'
 ```
 
 ---
 
-## Dockerfile
+## Known Gotchas
 
-```dockerfile
-FROM python:3.11-slim
-WORKDIR /app
-# Install system audio libs needed by soundfile/librosa
-RUN apt-get update && apt-get install -y libsndfile1 ffmpeg && rm -rf /var/lib/apt/lists/*
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
+1. **Port mismatch**: Dockerfile exposes/runs on **5000**, not 8000. The existing CLAUDE.md said 8000 — that was wrong. Ensure `DSP_URL=http://dsp:5000` in NestJS `.env`.
+2. **`sr=None` not 22050**: Audio is loaded at native sample rate. The old CLAUDE.md forced 22050 Hz — the actual code does not. Beat tracking accuracy depends on the native sr being reasonable (8k–96k).
+3. **librosa 0.10+ `beat_track` return**: Returns a scalar in some builds, 1-D array in others. `float(tempo)` handles both; do not use `np.atleast_1d(tempo)[0]` (that was the old workaround — current code uses plain `float()`).
+4. **Energy is NOT 0–100**: The formula produces an unbounded float (~0.5–8 typical). The old CLAUDE.md claimed `min(100.0, ...)` — that formula no longer exists.
+5. **Major/minor heuristic**: Uses chroma relative-minor shift (+9 semitones), NOT tonnetz. Tonnetz approach shown in old CLAUDE.md was replaced.
+6. **120 s slice only for BPM/key**: Duration uses the full waveform. Don't pass `y` (sliced) to `get_duration` — use `y_full`.
+7. **Memory spike on long files**: A 10-min 320 kbps MP3 decoded to float32 can reach 500 MB. Consider adding a max-duration guard if very long files are expected.
+8. **Presigned URL TTL**: NestJS worker generates a 15-min presigned URL. Total pipeline budget: 60 s download + analysis. Keep buffer; do not reduce below 5 min TTL.
 
 ---
 
-## Integration with NestJS
+## Reference Docs
 
-### How AudioExtractionWorker calls DSP
+Read this file first. Only open a doc when it answers something this CLAUDE.md can't.
 
-```ts
-// apps/api/src/modules/queue/workers/audio-extraction.worker.ts
-@Processor(QUEUE_NAMES.AUDIO)
-export class AudioExtractionWorker {
-  constructor(
-    private readonly httpService: HttpService,
-    @InjectRepository(Song) private readonly songRepo: Repository<Song>,
-    private readonly storageService: StorageService,
-  ) {}
+| Doc | Read when… |
+|-----|-----------|
+| `../../docs/10_implementation_plan.md` | You're implementing a change to DSP — read **only the `### DSP` sub-section** of the relevant phase |
+| `../../docs/03_tech_stack.md` | You need to verify the approved library versions or understand why a tech choice was made |
+| `../../docs/09_recommendation_engine.md` | You need to understand how `bpm`, `camelotKey`, `energy` fields are consumed by the recommendation engine |
+| `../../docs/08_ai_architecture.md` | You need to understand the full AI subsystem context (DSP is Subsystem 1) |
+| `../../CLAUDE.md` | You need project-level context: env vars, BullMQ queue names, MinIO bucket names |
 
-  @Process('extract-metadata')
-  async handle(job: Job<{ songId: string }>) {
-    const song = await this.songRepo.findOneOrFail({ where: { id: job.data.songId } });
-    const audioUrl = await this.storageService.presignedGetObject('audio', song.fileKey, 900); // 15 min
-
-    try {
-      const result = await firstValueFrom(
-        this.httpService.post<{ bpm: number; camelotKey: string; energy: number }>(
-          `${process.env.DSP_URL}/extract`,
-          { audioUrl },
-          { timeout: 120_000 }
-        )
-      );
-      await this.songRepo.update(song.id, {
-        bpm: result.data.bpm,
-        camelotKey: result.data.camelotKey,
-        energy: result.data.energy,  // stored but NEVER exposed in artist API responses
-      });
-      // Update job status for polling
-      await job.updateProgress(100);
-    } catch (err) {
-      // 422 or timeout → soft failure: leave bpm/camelotKey null
-      // Song still usable; artist can enter values manually
-      this.logger.warn(`DSP extraction failed for song ${song.id}: ${err.message}`);
-    }
-  }
-}
-```
-
-### Extraction Status Polling (client-side)
-
-```ts
-// GET /songs/upload/:jobId/status
-// Returns: { status: 'pending'|'done'|'failed', bpm: number|null, camelotKey: string|null }
-// Client polls every 3 seconds until status !== 'pending'
-```
-
----
-
-## Energy Field — Access Rules
-
-| Role | Can see energy? |
-|------|----------------|
-| Artist | ❌ Never (BL-37A) |
-| Admin | ✅ Yes (admin APIs) |
-| User | ❌ Never |
-| DSP next-song algorithm | ✅ Used internally |
-
-`energy` is stored in the DB but must be excluded from all `GET /songs/:id` and `GET /songs` response DTOs when the caller is ARTIST or USER.
-
----
-
-## Camelot Wheel Reference
-
-```
-      1A  2A  3A  4A  5A  6A  7A  8A  9A  10A  11A  12A
-key:  Am  Em  Bm  F#m C#m G#m D#m A#m Fm  Cm   Gm   Dm
-
-      1B  2B  3B  4B  5B  6B  7B  8B  9B  10B  11B  12B
-key:  C   G   D   A   E   B   F#  Ab  Eb  Bb   F    Db
-```
-
-Adjacent keys (distance 0.5): same number different letter (e.g. 8B ↔ 8A), or ±1 same letter (e.g. 8B ↔ 7B, 8B ↔ 9B).
-
----
-
-## Common Errors & Fixes
-
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `soundfile.LibsndfileError` | Missing `libsndfile1` system lib | Add `apt-get install libsndfile1` to Dockerfile |
-| `librosa.util.exceptions.ParameterError` | Audio too short | Wrap in try/except, return 422 |
-| `tempo` is array in librosa 0.10+ | API change | Use `np.atleast_1d(tempo)[0]` |
-| `requests.exceptions.Timeout` | MinIO presigned URL expired | Presigned URLs must be ≥15 min TTL; worker generates fresh URL per job |
-| 422 from DSP | Unreadable audio | NestJS worker logs warning, leaves `bpm=null`; artist can enter manually |
+**Rule**: open one doc, extract what you need, close it. The `extract.py` implementation is fully described in this file — read the doc only when you hit a gap.

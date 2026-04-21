@@ -1,362 +1,142 @@
-# apps/web — Frontend CLAUDE.md
+## Project Overview
 
-Next.js 14 App Router · React 18 · TypeScript · Tailwind · shadcn/ui · next-intl
-
-Read `../../CLAUDE.md` first for project-level context (ports, phases, API conventions).
-
----
-
-## Design System — Midnight Vinyl
-
-Dark warm aesthetic: charcoal bg, gold accents, ivory text. No white, no grays.
-
-### CSS Custom Properties (`src/app/globals.css`)
-
-| Token | Value | Use |
-|-------|-------|-----|
-| `--gold` | `#e8b84b` | Primary accent, active states, borders |
-| `--gold-dim` | `#a07d2e` | Scrollbar, subdued gold |
-| `--gold-glow` | `rgba(232,184,75,0.15)` | Box shadows, ambient glows |
-| `--ivory` | `#f5eed8` | Primary text |
-| `--charcoal` | `#0d0d0d` | Page background |
-| `--surface` | `#111111` | Card backgrounds |
-| `--surface-2` | `#181818` | Hover state |
-| `--muted-text` | `#5a5550` | Secondary labels, placeholders |
-| `--font-display` | `Playfair Display` | All h1–h4, stats, numbers |
-| `--font-body` | `DM Sans` | Body text, UI labels |
-
-### Styling Rules
-
-- **Layout/spacing/sizing/dynamic state** → inline `style={{}}`
-- **Animations + utility effects** → `className="..."`
-- **Never** hardcode hex in className. Never use Tailwind `gray-*` palette.
-
-### Animation Classes (all keyframes in `globals.css`)
-
-| Class | Use |
-|-------|-----|
-| `anim-fade-up` | Section/row entrance |
-| `anim-fade-up-1` … `anim-fade-up-8` | Stagger (cap at 8) |
-| `anim-scale-reveal` | Album art, avatars on mount |
-| `anim-hero-reveal` | Hero banners |
-| `vinyl-spin` | Spinning disc (circular elements only) |
-| `vinyl-glow` | Gold glow ring when playing |
-| `avatar-ring-pulse` | Artist/user avatars |
-| `btn-gold` | Primary CTA button (shimmer effect) |
-| `auth-field` | Input with animated gold underline |
-| `noise` | Analog texture overlay |
-| `shimmer` | Skeleton loading state |
-
-**Stagger recipe:**
-```tsx
-<div className={`anim-fade-up anim-fade-up-${Math.min(i + 1, 8)}`}>
-```
-
-**Hover without useState** (use onMouseEnter/Leave directly on element):
-```tsx
-onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(232,184,75,0.3)'; }}
-onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(232,184,75,0.1)'; }}
-```
-
-**Hidden button reveal on row hover** (data attribute pattern):
-```tsx
-// Row hover:
-onMouseEnter={e => {
-  const btn = e.currentTarget.querySelector<HTMLElement>('[data-action-btn]');
-  if (btn) btn.style.opacity = '1';
-}}
-// Button: style={{ opacity: 0, transition: 'opacity 0.15s' }} data-action-btn
-```
-
-### Glassmorphism Card Pattern
-
-```tsx
-style={{
-  background: 'rgba(17,17,17,0.75)',
-  border: '1px solid rgba(232,184,75,0.1)',
-  backdropFilter: 'blur(12px)',
-  borderRadius: 8,
-  boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-  transition: 'border-color 0.2s, transform 0.25s cubic-bezier(0.16,1,0.3,1)',
-}}
-```
-
-### Transition Standard
-
-```tsx
-transition: 'color 0.18s, background 0.18s, border-color 0.18s'  // state changes
-transition: 'transform 0.25s cubic-bezier(0.16,1,0.3,1)'         // movement (spring)
-```
-
-### Prohibited
-
-- No Framer Motion / GSAP / @motionone
-- No `@keyframes` inside component files (globals.css only)
-- No Radix UI beyond: Dialog, Dropdown, Toast, Avatar
-- No `vinyl-spin` on non-circular elements
-- No purple/blue accents
-- No bare `<Loader2>` for full-page loads (use `vinyl-spin` disc)
+- **App**: My Music — self-hosted Spotify alternative for 20–200 users
+- **Stack**: Next.js 14 App Router · React 18 · TypeScript · Tailwind · Zustand · axios · next-intl · zod + react-hook-form
+- **UI lib**: Radix UI (Dialog, Dropdown, Toast, Avatar only) + lucide-react icons
+- **Build**: `next build`, output standalone (Docker), port 3000
+- **Monorepo**: `@mymusic/types` shared package from `packages/types/`
+- Read `../../CLAUDE.md` for API conventions, phase status, BL codes, queue names
 
 ---
 
-## Routing Structure
+## Folder Structure
 
 ```
-src/app/
-  [locale]/
-    (app)/            ← Auth-required, has Sidebar + PlayerBar
-      feed/           — H1 Activity Feed
-      playlists/
-        page.tsx      — G1 My Playlists
-        create/       — G3 Create Playlist
-        liked/        — G5 Liked Songs
-        saved/        — G6 Saved Playlists
-        [id]/
-          page.tsx    — G2 Playlist Detail
-          edit/       — G4 Edit Playlist
-      users/[id]/     — H4 Public User Profile
-      songs/[id]/     — F1 Song Detail / Stream
-      albums/[id]/    — F3 Album Detail
-      artists/[id]/   — C1 Public Artist Profile
-      browse/         — E2 Browse
-      search/         — E3 Search Results
-      queue/          — F2 Queue Page
-      profile/
-        page.tsx      — B1 View Profile
-        edit/         — B2 Edit Profile
-        premium/      — B5 Premium Upgrade
-      artist/
-        songs/        — D2 My Songs
-        upload/       — D1 Upload Song
-        albums/       — G9 Create Album
-        drops/        — I2 Artist Drops
-        analytics/    — D3 Artist Analytics
-      payment/
-        page.tsx      — J1 Payment Selection
-        vnpay/        — J2 VNPay
-        momo/         — J3 MoMo
-      downloads/      — K2 Downloads Page
-      ai/             — H5 AI Chat
-      admin/
-        songs/        — D5 Admin Song Queue
-        genres/       — L2 Genre Management
-        users/        — L3 User Management
-        reports/      — L4 Reports
-        audit/        — L5 Audit Log
-        payments/     — L6 Payments
-    (auth)/           ← Redirects to / if logged in
-      login/          — A4
-      register/       — A1
-      register/artist/— A2
-      verify-email/   — A3
-      forgot-password/— A5
-      verify-code/    — A6
-      reset-password/ — A7
-    (public)/         — No auth required
-      songs/[id]/teaser/ — I1 Drop Teaser
+src/
+  app/              # Next.js App Router — [locale]/(app|auth|public)/
+  components/       # Shared UI: auth/ layout/ music/ profile/ providers/
+  hooks/            # usePlayer.ts, useQueue.ts
+  lib/
+    api/            # 17 axios modules (*.api.ts) + axios.ts client
+    utils/          # roleRedirect.ts
+  store/            # 4 Zustand stores (use*Store.ts)
+  i18n/             # config.ts + request.ts (next-intl)
+  middleware.ts     # Locale detection + auth route guard
+  messages/         # en.json, vi.json — i18n strings
 ```
 
 ---
 
-## Zustand Stores (`src/store/`)
+## Architecture & Patterns
 
-### useAuthStore
-```ts
-interface AuthState {
-  user: User | null;
-  isLoading: boolean;
-  setUser: (user: User | null) => void;
-  hydrate: () => Promise<void>;  // calls GET /users/me
-  logout: () => Promise<void>;
-}
-interface User {
-  id: string; name: string; email: string; avatarUrl: string | null;
-  roles: string[]; isPremium: boolean; isEmailVerified: boolean;
-}
-```
+- **Route groups**: `(app)` = auth-required + Sidebar/PlayerBar shell; `(auth)` = redirects if logged in; `(public)` = open
+- **Auth**: httpOnly cookies (`access_token`/`refresh_token`); middleware checks cookie; 401 → silent refresh via axios interceptor queue → retry
+- **State**: Zustand stores; `useAuthStore` hydrated by `AuthProvider` on mount via `GET /users/me`
+- **API**: axios instance at `src/lib/api/axios.ts`; base `http://localhost:3001/api/v1`; `withCredentials: true`
+- **Response unwrap**: API returns `{ success, data }` envelope; use `res.data?.data ?? res.data` pattern
+- **Data fetching**: `useEffect` + local `useState(loading/data)` — no React Query
+- **Optimistic updates**: save prev → update state → call API → rollback on catch
+- **Forms**: react-hook-form + zod resolver; no custom form abstractions
+- **Styling rule**: layout/spacing/dynamic state → inline `style={{}}`; animations/effects → `className`
+- **No error boundaries**: error handling via try-catch in each page; no global `error.tsx`
+- **Toast**: local inline pattern (`useState` + `setTimeout(3000)`) — no global toast provider yet
 
-### usePlayerStore
-```ts
-interface PlayerState {
-  currentSong: Song | null;
-  isPlaying: boolean;
-  positionSeconds: number;
-  duration: number;
-  volume: number;
-  setCurrent: (song: Song) => void;
-  setPlaying: (v: boolean) => void;
-  setPosition: (s: number) => void;
-  setDuration: (s: number) => void;
-  setVolume: (v: number) => void;
-}
-```
+---
 
-### useQueueStore
-```ts
-interface QueueState {
-  items: QueueItem[];
-  isSmartOrder: boolean;
-  setItems: (items: QueueItem[]) => void;
-  addItem: (song: Song) => void;
-  removeItem: (id: string) => void;
-  toggleSmartOrder: () => void;
-}
-```
+## Key Files
 
-### useLocaleStore
-```ts
-interface LocaleState {
-  locale: 'en' | 'vi';
-  setLocale: (l: 'en' | 'vi') => void;
-}
+| File | Role |
+|------|------|
+| `src/middleware.ts` | Locale routing + auth cookie guard |
+| `src/app/globals.css` | Midnight Vinyl design tokens + all `@keyframes` |
+| `src/lib/api/axios.ts` | Axios instance, 401 interceptor, refresh queue |
+| `src/components/providers/AuthProvider.tsx` | Hydrates `useAuthStore` on app mount |
+| `src/store/useAuthStore.ts` | User identity, roles, premium; `hasRole()`, `isPremium()` |
+| `src/store/usePlayerStore.ts` | Current song, play state, volume, position |
+| `src/store/useQueueStore.ts` | Queue items, smart order toggle |
+| `src/hooks/usePlayer.ts` | Howler.js wrapper; fetches stream URL; fires play event at ≥30s |
+| `src/app/[locale]/(app)/layout.tsx` | Persistent shell: Sidebar + TopBar + PlayerBar (`pb-24`) |
+| `src/app/[locale]/layout.tsx` | NextIntlClientProvider + AuthProvider wrapper |
+| `src/lib/utils/roleRedirect.ts` | `getRoleHome()` — role-based post-login redirect |
+| `src/i18n/config.ts` | Locales `['en', 'vi']`, defaultLocale `'en'` |
+| `src/components/layout/Sidebar.tsx` | Nav links, locale switcher, user avatar |
+| `src/components/layout/PlayerBar.tsx` | Fixed bottom player, uses `usePlayer` + `usePlayerStore` |
+
+---
+
+## Naming Conventions
+
+- **Component files**: PascalCase `.tsx` — `SongCard.tsx`, `AuthButton.tsx`
+- **Page files**: always `page.tsx` in route folder
+- **Hooks**: `use` prefix camelCase — `usePlayer.ts`, `useQueue.ts`
+- **Stores**: `use` prefix + `Store` suffix — `useAuthStore.ts`, `usePlayerStore.ts`
+- **API modules**: camelCase + `.api.ts` — `songs.api.ts`, `admin.api.ts`
+- **Utils**: camelCase, descriptive — `roleRedirect.ts`
+- **Types/interfaces**: PascalCase; component props suffix `Props` — `SongCardProps`
+- **Route folders**: lowercase kebab-case — `forgot-password/`, `verify-email/`
+- **i18n keys**: namespace dot notation — `useTranslations('auth')` then `t('login')`
+
+---
+
+## Data Flow
+
+1. **User action** → component event handler (or form `onSubmit`)
+2. **Optimistic**: update Zustand store immediately if applicable
+3. **API call**: `src/lib/api/*.api.ts` → axios instance → `POST/GET/PATCH /api/v1/...`
+4. **Response**: unwrap `res.data?.data ?? res.data` → set local state / update store
+5. **Auth failure**: 401 interceptor → refresh token → retry → on fail redirect `/[locale]/login`
+6. **Render**: component reads from store (`useAuthStore`, `usePlayerStore`) or local state
+
+---
+
+## Common Commands
+
+```bash
+npm run dev        # Start Next.js on port 3000
+npm run build      # Production build
+npm run start      # Serve production build on port 3000
+npm run lint       # ESLint check
 ```
 
 ---
 
-## API Layer (`src/lib/api/`)
+## Environment & Config
 
-**axios instance** (`axios.ts`): base URL `http://localhost:3001/api/v1`, `withCredentials: true`, 401 interceptor → `POST /auth/refresh` → retry.
-
-**Response unwrap pattern** (API returns `{ success, data }` envelope — axios interceptor unwraps):
-```ts
-const res = await songsApi.getSong(id);
-const song = res.data?.data ?? res.data;  // defensive double-unwrap if interceptor missed
-```
-
-### All API Files + Key Methods
-
-**`auth.api.ts`**: `login`, `register`, `registerArtist`, `logout`, `refresh`, `forgotPassword`, `verifyCode`, `resetPassword`, `verifyEmail`, `resendVerification`, `getSessions`, `deleteSession`
-
-**`songs.api.ts`**: `uploadSong`, `getExtractionStatus(jobId)`, `getSongs(params)`, `getSong(id)`, `updateSong(id, dto)`, `deleteSong(id)`, `playSong(id, secondsPlayed)`, `getStreamUrl(id)`, `getNextSong(id)`, `markPlayed(id)`, `likeSong(id)`, `unlikeSong(id)`, `getTeaser(id)`, `subscribeDropNotify(id)`, `cancelDrop(id)`, `rescheduleDrop(id, dto)`, `searchSongs(q)`
-
-**`albums.api.ts`**: `createAlbum`, `getAlbums`, `getAlbum(id)`, `updateAlbum(id, dto)`, `deleteAlbum(id)`, `addSongToAlbum(albumId, songId)`, `removeSongFromAlbum(albumId, songId)`
-
-**`playlists.api.ts`**: `getPlaylists(page, limit)`, `createPlaylist(dto)`, `getPlaylist(id)`, `updatePlaylist(id, dto)`, `deletePlaylist(id)`, `addSong(playlistId, songId)`, `removeSong(playlistId, songId)`, `savePlaylist(id)`, `unsavePlaylist(id)`, `getSavedPlaylists()`, `getLikedSongs()`, `getUserPlaylists(userId, page, limit)`
-
-**`users.api.ts`**: `getMe`, `updateMe(dto)`, `uploadAvatar(file)`, `getUser(id)`, `getFollowing(id, page, limit)`, `getFollowers(id, page, limit)`, `followUser(id)`, `unfollowUser(id)`, `submitOnboarding(genreIds)`, `updateGenres(genreIds)`
-
-**`artist.api.ts`**: `getArtist(id)`, `getMyProfile`, `updateMyProfile(dto)`, `uploadAvatar(file)`, `followArtist(id)`, `unfollowArtist(id)`, `getFollowers(id)`
-
-**`playback.api.ts`**: `getState`, `saveState(dto)`, `getQueue`, `addToQueue(songId)`, `reorderQueue(items)`, `toggleSmartOrder`, `shuffleQueue`, `removeFromQueue(itemId)`, `clearQueue`, `skipSong(songId)`
-
-**`recommendations.api.ts`**: `getRecommendations(page, limit)`, `getMoodPlaylist(mood?, timezone?, localHour?, limit?)`
-
-**`feed.api.ts`**: `getFeed(page, limit)`
-
-**`notifications.api.ts`**: `getNotifications(page, limit)`, `getUnreadCount`, `markRead(id)`, `markAllRead`
-
-**`drops.api.ts`**: `getDrops`
-
-**`downloads.api.ts`**: `downloadSong(songId)`, `getDownloads`, `revalidateDownloads`, `removeDownload(songId)`
-
-**`payments.api.ts`**: `initiateVnpay(premiumType)`, `initiateMomo(premiumType)`
-
-**`genres.api.ts`**: `getGenres(page, limit)`
-
-**`reports.api.ts`**: `submitReport(dto)`
-
-**`admin.api.ts`**: `getAdminSongs(status)`, `approveSong(id)`, `rejectSong(id, reason)`, `requestReupload(id, reason)`, `restoreSong(id)`, `getGenreSuggestions`, `approveGenreSuggestion(id)`, `rejectGenreSuggestion(id)`, `getAdminUsers(params)`, `updateUserRoles(id, dto)`, `grantPremium(id, dto)`, `revokePremium(id)`, `getAdminReports(params)`, `dismissReport(id)`, `takedownReport(id)`, `getAuditLog(params)`, `getAdminPayments(params)`, `getAdminStats`
-
-**`ai.api.ts`**: `chat(message, conversationId?, timezone?)`
+- `NEXT_PUBLIC_API_URL` — API base (default: `http://localhost:3001/api/v1`)
+- `NEXT_PUBLIC_MINIO_URL` — MinIO public URL for image/audio assets
+- Config files: `next.config.mjs` (standalone output, remote images), `tailwind.config.ts`, `tsconfig.json`
+- MinIO remote image pattern: `localhost:9000` (configured in `next.config.mjs`)
+- i18n locales defined in `src/i18n/config.ts`; middleware matcher excludes `_next`, `api`, static files
 
 ---
 
-## Key Hooks (`src/hooks/`)
+## Known Gotchas
 
-### usePlayer
-```ts
-// Wraps Howler.js instance
-// - play(song: Song): fetches streamUrl via GET /songs/:id/stream, loads Howler
-// - Called POST /songs/:id/play when secondsPlayed >= 30
-// - Sets navigator.mediaSession metadata
-// - On track end: calls GET /songs/:id/next, auto-plays result
-```
-
-### useQueue
-```ts
-// Queue CRUD helpers — calls playback.api.ts
-// toggleSmartOrder(): PATCH /playback/queue/smart-order
-// shuffle(): PATCH /playback/queue/shuffle
-```
+- **Double-unwrap**: API interceptor may or may not unwrap envelope — always use `res.data?.data ?? res.data`
+- **`isPremium()` method**: admins bypass premium checks in `useAuthStore` — check roles before gating
+- **Tailwind gray-\* banned**: never use `gray-*` palette; use CSS vars (`--surface`, `--muted-text`)
+- **No hex in className**: inline `style` only for color values; className for animation classes
+- **`vinyl-spin` circular only**: applying to non-circle elements causes visual glitch
+- **`@keyframes` location**: ALL keyframes must live in `globals.css` — never in component files
+- **Radix UI scope**: only Dialog, Dropdown, Toast, Avatar are approved — no other Radix primitives
+- **`anim-fade-up` stagger cap**: max index is 8 (`anim-fade-up-8`); cap with `Math.min(i+1, 8)`
+- **`use client` everywhere**: most pages are client components; RSC is minimal
+- **Locale in all links**: always prefix hrefs with `/${locale}/` or use next-intl `<Link>`
+- **Auth layout canvas**: `(auth)/layout.tsx` uses `requestAnimationFrame` canvas — do not SSR it
 
 ---
 
-## i18n
+## Reference Docs
 
-- `src/messages/en.json` and `src/messages/vi.json`
-- All user-visible strings must use `useTranslations('namespace')`
-- Locale segment: `/en/...` or `/vi/...` — handled by middleware
+Read this file first. Only open a doc when it answers something this CLAUDE.md can't.
 
----
+| Doc | Read when… |
+|-----|-----------|
+| `../../docs/02_specification.md` | You need the exact screen layout or role-access matrix for a specific screen code (A1–L6) |
+| `../../docs/07_api_interfaces.md` | You need the full request body / response shape of an endpoint not listed here |
+| `../../docs/10_implementation_plan.md` | You're starting a phase — read **only the `### Frontend` sub-section** of that phase |
+| `../../docs/08_ai_architecture.md` | You're building the AI chat page (H5, Phase 10) — need the `actions[]` response schema and skill list |
+| `../../docs/01_requirements_en.md` | You need the exact wording of a BL code to understand a business rule |
+| `../../CLAUDE.md` | You need API response envelope, phase status, BullMQ queues, song status machine |
 
-## Data Fetching Pattern
-
-```ts
-// Standard page pattern (no React Query for one-off loads)
-const [data, setData] = useState(null);
-const [loading, setLoading] = useState(true);
-
-useEffect(() => {
-  api.getResource(id)
-    .then(r => setData(r.data?.data ?? r.data))
-    .catch(err => console.error(err))
-    .finally(() => setLoading(false));
-}, [id]);
-```
-
-**Optimistic update with rollback:**
-```ts
-// 1. Save previous value
-// 2. Update state immediately
-// 3. Call API
-// 4. On catch: restore previous value
-```
-
----
-
-## Per-Phase FE Checklist
-
-### Phase 7 — Payments & Premium Downloads
-**Files to create/modify:**
-- `src/app/[locale]/(app)/profile/premium/page.tsx` — B5 pricing table (4 plans)
-- `src/app/[locale]/(app)/payment/page.tsx` — J1 VNPay vs MoMo selection
-- `src/app/[locale]/(app)/payment/vnpay/page.tsx` — J2 redirect + callback result page
-- `src/app/[locale]/(app)/payment/momo/page.tsx` — J3 MoMo result page
-- `src/app/[locale]/(app)/downloads/page.tsx` — K2 downloads list
-- `src/components/music/DownloadModal.tsx` — K1 download modal
-- `src/lib/api/payments.api.ts` — `initiateVnpay`, `initiateMomo`
-- `src/lib/api/downloads.api.ts` — `downloadSong`, `getDownloads`, `revalidateDownloads`, `removeDownload`
-- `src/lib/utils/crypto.ts` — Web Crypto API AES-256-CBC decrypt for offline `.enc` files
-- Wire "Download" option in `SongContextMenu` (visible only when `user.isPremium`)
-- Show `PremiumBadge` in header/sidebar when `user.isPremium`
-
-### Phase 8 — Drops & Notifications
-**Files to create/modify:**
-- `src/app/[locale]/(public)/songs/[id]/teaser/page.tsx` — I1 Drop Teaser
-- `src/app/[locale]/(app)/artist/drops/page.tsx` — I2 Artist My Drops
-- `src/components/drops/DropCountdown.tsx` — live countdown with `setInterval`
-- `src/components/drops/DropCard.tsx`
-- `src/components/drops/CancelDropModal.tsx`
-- `src/components/drops/RescheduleDropModal.tsx`
-- `src/components/layout/NotificationBell.tsx` — polls unread-count every 30s, Radix Dropdown
-- `src/hooks/useNotifications.ts`
-- `src/lib/api/notifications.api.ts`
-- Wire dropAt date picker into existing `UploadForm.tsx` (D1)
-
-### Phase 9 — Reports, Analytics & Admin Tools
-**Files to create/modify:**
-- `src/app/[locale]/(app)/artist/analytics/page.tsx` — D3 with recharts LineChart
-- `src/app/[locale]/(app)/admin/users/page.tsx` — L3
-- `src/app/[locale]/(app)/admin/reports/page.tsx` — L4
-- `src/app/[locale]/(app)/admin/audit/page.tsx` — L5
-- `src/app/[locale]/(app)/admin/payments/page.tsx` — L6
-- `src/components/modals/ReportModal.tsx` — triggered from SongContextMenu
-- Wire "Report" option in `SongContextMenu`
-
-### Phase 10 — Recommendations, Mood & AI Chat
-**Files to create/modify:**
-- `src/app/[locale]/(app)/playlists/mood/page.tsx` — G7 mood selector
-- `src/app/[locale]/(app)/ai/page.tsx` — H5 AI chat
-- Update `src/app/[locale]/(app)/feed/page.tsx` (E1 Home) — add "Recommended for you" row
-- `src/lib/api/recommendations.api.ts` — `getRecommendations`, `getMoodPlaylist`
-- `src/lib/api/ai.api.ts` — `chat(message, conversationId?, timezone?)`
+**Rule**: open one doc, find the single answer you need, close it. Never read docs upfront before you have a specific question.
