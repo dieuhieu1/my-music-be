@@ -23,7 +23,9 @@ import {
   ClipboardList,
   LayoutDashboard,
   ListOrdered,
+  Download,
 } from 'lucide-react';
+import { PremiumBadge } from '@/components/layout/PremiumBadge';
 import { authApi } from '@/lib/api/auth.api';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { useQueueStore } from '@/store/useQueueStore';
@@ -44,6 +46,7 @@ const listenerItems: NavItem[] = [
   { href: '/playlists/liked', label: 'Liked Songs',     Icon: Heart        },
   { href: '/playlists/saved', label: 'Saved',           Icon: Bookmark     },
   { href: '/feed',            label: 'Activity Feed',   Icon: Activity     },
+  { href: '/downloads',       label: 'Downloads',       Icon: Download     },
 ];
 
 const artistItems: NavItem[] = [
@@ -319,15 +322,14 @@ export default function Sidebar() {
                 }}>
                   {user.name}
                 </p>
-                <p style={{
-                  fontSize: '0.63rem',
-                  color: 'var(--muted-text)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}>
-                  {user.roles?.includes('PREMIUM') ? '✦ Premium' : 'Listener'}
-                </p>
+                <div style={{ marginTop: 2 }}>
+                  <PremiumBadge variant="pill" />
+                  {!user.premiumStatus && (
+                    <span style={{ fontSize: '0.63rem', color: 'var(--muted-text)' }}>
+                      Listener
+                    </span>
+                  )}
+                </div>
               </div>
               <UserCircle2 size={13} style={{ color: 'var(--muted-text)', flexShrink: 0, opacity: 0.5 }} />
             </Link>

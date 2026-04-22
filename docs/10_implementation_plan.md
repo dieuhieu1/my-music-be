@@ -56,6 +56,24 @@
 
 **BL codes:** BL-20–21, BL-26, BL-52–58, BL-74–77
 
+### Progress Tracker
+
+| Layer | Status | Notes |
+|-------|--------|-------|
+| DB / Entities | ✅ Done | `payment_records`, `download_records` migrated |
+| API Endpoints | ✅ Done | All 10 endpoints implemented (see commits) |
+| Jobs / Cron | ✅ Done | Hourly expiry cron + daily hard-delete cron |
+| FE — J1 PaymentPage | ✅ Done | Plan cards + gateway selector + redirect flow |
+| FE — J2 VNPay return | ✅ Done | Suspense + callback verify + store sync |
+| FE — J3 MoMo return | ✅ Done | Suspense + callback verify + store sync |
+| FE — PremiumUpgradeModal | ✅ Done | Radix Dialog; reusable from any page |
+| FE — B5 Premium Status | 🔲 Todo | `profile/premium/page.tsx` — current plan + expiry |
+| FE — K1 DownloadModal | ✅ Done | Quota bar + AES decrypt flow + browser save |
+| FE — K2 Downloads list | ✅ Done | Active/expiring/revoked rows, remove, silent revalidate |
+| FE — PremiumBadge | ✅ Done | `PremiumBadge.tsx` — pill + icon variants; wired into Sidebar user section |
+| FE — SongContextMenu download | ✅ Done | `SongContextMenu.tsx` — Download item only for `isPremium()` |
+| FE — `lib/utils/crypto.ts` | ✅ Done | AES-CBC decrypt via Web Crypto API + `triggerBlobDownload` |
+
 ### DB / Entities
 
 | Entity | Key fields |
@@ -101,18 +119,26 @@
 
 **Screens:** B5, J1, J2, J3, K1, K2
 
-| Screen | Description |
-|--------|-------------|
-| B5 | Pricing table — 4 plan cards (price + duration); CTA → J1 |
-| J1 | Payment selection — VNPay vs MoMo cards → redirect to `paymentUrl` |
-| J2/J3 | Callback pages — success/failure state; auto-redirect home on success |
-| K1 | `DownloadModal.tsx` — quota display (`X / 100`); download button → anchor tag trigger |
-| K2 | Downloads list — expiry date, Revalidate button, Remove button; offline decrypt via Web Crypto |
+| Screen | Status | Description |
+|--------|--------|-------------|
+| B5 | ✅ Done | `profile/premium/page.tsx` — active/inactive states, expiry + "expiring soon" badge, quota bar, PremiumUpgradeModal CTA |
+| J1 | ✅ Done | `payment/page.tsx` — plan cards + VNPay/MoMo gateway selector → redirect to `paymentUrl` |
+| J2 | ✅ Done | `payment/vnpay/page.tsx` — reads query params, POSTs callback, shows result card |
+| J3 | ✅ Done | `payment/momo/page.tsx` — reads query params, POSTs callback, shows result card |
+| K1 | ✅ Done | `DownloadModal.tsx` — quota bar + decrypt flow + browser save; non-premium gate → `PremiumUpgradeModal` |
+| K2 | ✅ Done | `downloads/page.tsx` — active/expiring/revoked rows, remove, silent revalidate on load |
 
-**Other:**
-- `PremiumBadge.tsx` — in header when `user.isPremium`
+**Shared components built (session 2026-04-22):**
+- `components/payment/PlanCard.tsx` ✅ — plan card with gold ring pulse on selected
+- `components/payment/GatewaySelector.tsx` ✅ — VNPay / MoMo 2-col picker
+- `components/payment/PaymentResultCard.tsx` ✅ — loading / success / error states
+- `components/payment/PremiumUpgradeModal.tsx` ✅ — Radix Dialog; trigger from anywhere
+- `components/payment/plans.ts` ✅ — hardcoded plan data (BL-20 pricing)
+
+**Still to build:**
+- `PremiumBadge.tsx` — in header when `isPremium()`
 - `lib/utils/crypto.ts` — decrypt flow: `base64url-decode(aesKey) → crypto.subtle.importKey('raw', keyBuf, 'AES-CBC', false, ['decrypt']) → crypto.subtle.decrypt({ name:'AES-CBC', iv: hex2buf(iv) }, key, encryptedBuf) → Blob → object URL → audio.src`
-- `SongContextMenu` download option: only visible when `user.isPremium`
+- `SongContextMenu` download option: only visible when `isPremium()`
 
 ### Jobs / Cron
 
@@ -372,7 +398,7 @@ Files: `ai.module.ts`, `ai.controller.ts`, `ai.service.ts`, `skills.dispatcher.t
 | 4B | Admin queue, audit, genre tags | D4–D5, L1–L2 | ✅ |
 | 5 | Browse, search, playback, queue | E1–E4, F2, PlayerBar | ✅ |
 | 6 | Playlists, liked, feed | G1–G6, H1, H4 | ✅ |
-| 7 | Payments, downloads, crons | B5, J1–J3, K1–K2 | 🔄 |
+| 7 | Payments, downloads, crons | ✅ Complete | ✅ |
 | 8 | Drops, notifications, cron | I1–I4, H3 | 🔲 |
 | 9 | Reports, analytics, admin CRUD | E5, D3, L3–L6 | 🔲 |
 | 10 | Recommendations, mood, AI chat | G7, E1 update, H5 | 🔲 |

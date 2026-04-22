@@ -1,8 +1,9 @@
 'use client';
 
-import { Music2, Plus } from 'lucide-react';
+import { Music2 } from 'lucide-react';
 import { usePlayerStore, type PlayerSong } from '@/store/usePlayerStore';
 import type { Song } from '@/lib/api/songs.api';
+import { SongContextMenu } from '@/components/music/SongContextMenu';
 
 interface Props {
   song: Song;
@@ -10,9 +11,10 @@ interface Props {
   artistName?: string;
   onPlay: (song: PlayerSong) => void;
   onAddToQueue?: (songId: string) => void;
+  onDownload?: (songId: string) => void;
 }
 
-export function SongRow({ song, index, artistName, onPlay, onAddToQueue }: Props) {
+export function SongRow({ song, index, artistName, onPlay, onAddToQueue, onDownload }: Props) {
   const { currentSong, isPlaying } = usePlayerStore();
   const isActive = currentSong?.id === song.id;
 
@@ -120,23 +122,18 @@ export function SongRow({ song, index, artistName, onPlay, onAddToQueue }: Props
         {fmtDuration(song.duration)}
       </span>
 
-      {/* Add to queue */}
-      {onAddToQueue && (
-        <button
+      {/* Context menu (queue + download) */}
+      {(onAddToQueue || onDownload) && (
+        <div
           data-queue-btn
-          type="button"
-          onClick={e => { e.stopPropagation(); onAddToQueue(song.id); }}
-          title="Add to queue"
-          style={{
-            opacity: 0, flexShrink: 0, background: 'none', border: 'none',
-            cursor: 'pointer', color: 'var(--muted-text)', padding: 4,
-            transition: 'opacity 0.15s, color 0.15s', display: 'flex',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--gold)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted-text)')}
+          style={{ opacity: 0, transition: 'opacity 0.15s', flexShrink: 0 }}
+          onClick={e => e.stopPropagation()}
         >
-          <Plus size={14} />
-        </button>
+          <SongContextMenu
+            onAddToQueue={onAddToQueue ? () => onAddToQueue(song.id) : undefined}
+            onDownload={onDownload ? () => onDownload(song.id) : undefined}
+          />
+        </div>
       )}
     </div>
   );
