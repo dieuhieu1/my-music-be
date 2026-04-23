@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, User, Settings, LogOut, Music2, Shield, KeyRound, LayoutDashboard } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, LogOut, Music2, Shield, KeyRound, LayoutDashboard } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
 import { Role } from '@mymusic/types';
 import { getRoleHome } from '@/lib/utils/roleRedirect';
+import NotificationBell from '@/components/layout/NotificationBell';
 
 export default function TopBar() {
   const { locale } = useParams<{ locale: string }>();
@@ -95,7 +96,9 @@ export default function TopBar() {
         ))}
       </div>
 
-      {/* ── Right: user area ─────────────────────────────────────────────── */}
+      {/* ── Right: notification bell + user area ─────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {user && <NotificationBell />}
       <div style={{ position: 'relative' }} ref={dropdownRef}>
         {user ? (
           <>
@@ -238,6 +241,7 @@ export default function TopBar() {
             </Link>
           </div>
         )}
+      </div>
       </div>
     </div>
   );
