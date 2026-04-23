@@ -25,5 +25,6 @@ import { StorageModule } from '../storage/storage.module';
   ],
   controllers: [FeedController],
   providers: [FeedService],
+  exports: [FeedService],
 })
 export class FeedModule {}

@@ -76,6 +76,24 @@ export class FeedService {
     return { items, total, page, limit };
   }
 
+  // ── createEvent (used by DropsService on drop fire) ──────────────────────
+
+  async createEvent(
+    actorId: string,
+    eventType: FeedEventType,
+    entityId?: string,
+    entityType?: string,
+  ): Promise<void> {
+    await this.feedEvents.save(
+      this.feedEvents.create({
+        actorId,
+        eventType,
+        entityId: entityId ?? null,
+        entityType: entityType ?? null,
+      }),
+    );
+  }
+
   // ── Private ───────────────────────────────────────────────────────────────
 
   private buildFeedItem(

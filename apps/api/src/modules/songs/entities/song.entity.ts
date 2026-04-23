@@ -65,6 +65,17 @@ export class Song {
   @Column({ name: 'drop_at', type: 'timestamptz', nullable: true })
   dropAt: Date | null;
 
+  // BullMQ delayed job IDs — stored so jobs can be removed on cancel/reschedule (BL-63, BL-65)
+  @Column({ name: 'drop_job_24h_id', length: 255, nullable: true })
+  dropJob24hId: string | null;
+
+  @Column({ name: 'drop_job_1h_id', length: 255, nullable: true })
+  dropJob1hId: string | null;
+
+  // True after the artist has used their one permitted reschedule (BL-65)
+  @Column({ name: 'has_rescheduled', default: false })
+  hasRescheduled: boolean;
+
   // Admin-supplied reason when requesting a reupload (Phase 4B — BL-84)
   @Column({ name: 'reupload_reason', type: 'text', nullable: true })
   reuploadReason: string | null;

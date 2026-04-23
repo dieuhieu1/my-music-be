@@ -28,7 +28,13 @@ export class Notification {
   @Column({ type: 'enum', enum: NotificationType })
   type: NotificationType;
 
-  // Flexible payload e.g. { songId, songTitle, reason }
+  @Column({ length: 255, default: '' })
+  title: string;
+
+  @Column({ type: 'text', default: '' })
+  body: string;
+
+  // Structured metadata consumed by the FE (songId, dropAt, artistName, etc.)
   @Column({ type: 'jsonb', nullable: true })
   payload: Record<string, unknown> | null;
 

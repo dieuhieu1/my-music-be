@@ -11,6 +11,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { GenresModule } from '../genres/genres.module';
 import { SongsModule } from '../songs/songs.module';
 import { MailModule } from '../mail/mail.module';
+import { DropsModule } from '../drops/drops.module';
 import { QUEUE_NAMES } from '../queue/queue.constants';
 
 @Module({
@@ -22,6 +23,7 @@ import { QUEUE_NAMES } from '../queue/queue.constants';
     GenresModule,
     SongsModule,
     MailModule,
+    DropsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

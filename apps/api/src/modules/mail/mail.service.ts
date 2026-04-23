@@ -102,4 +102,26 @@ export class MailService {
     return `<h2>Song Restored</h2>
 <p><strong>${songTitle}</strong> has been restored and is now live again on My Music.</p>`;
   }
+
+  // ── Drop email templates (Phase 8 — BL-61, BL-63, BL-65) ─────────────────
+
+  upcomingDropEmail(songTitle: string, artistName: string, dropAt: Date, is24h: boolean): string {
+    const timeLabel = is24h ? '24 hours' : '1 hour';
+    return `<h2>Upcoming Drop Alert</h2>
+<p><strong>${artistName}</strong> is dropping "<strong>${songTitle}</strong>" in ${timeLabel}!</p>
+<p>Drop time: <strong>${dropAt.toLocaleString()}</strong></p>
+<p>Open My Music to be ready when it drops.</p>`;
+  }
+
+  dropCancelledEmail(songTitle: string, artistName: string): string {
+    return `<h2>Drop Cancelled</h2>
+<p>Unfortunately, <strong>${artistName}</strong>'s drop of "<strong>${songTitle}</strong>" has been cancelled.</p>
+<p>Stay tuned for future releases!</p>`;
+  }
+
+  dropRescheduledEmail(songTitle: string, artistName: string, newDropAt: Date): string {
+    return `<h2>Drop Rescheduled</h2>
+<p><strong>${artistName}</strong>'s drop of "<strong>${songTitle}</strong>" has been rescheduled.</p>
+<p>New drop time: <strong>${newDropAt.toLocaleString()}</strong></p>`;
+  }
 }

@@ -17,6 +17,7 @@ import { GenresService } from '../genres/genres.service';
 import { SongsService } from '../songs/songs.service';
 import { NotificationType, SongStatus } from '../../common/enums';
 import { QUEUE_NAMES } from '../queue/queue.constants';
+import { DropsService } from '../drops/drops.service';
 import { RejectSongDto } from './dto/reject-song.dto';
 import { ReuploadRequiredDto } from './dto/reupload-required.dto';
 import { RejectGenreSuggestionDto } from './dto/reject-genre-suggestion.dto';
@@ -36,6 +37,7 @@ export class AdminService {
     private readonly mailService: MailService,
     private readonly genresService: GenresService,
     private readonly songsService: SongsService,
+    private readonly dropsService: DropsService,
     @InjectQueue(QUEUE_NAMES.EMAIL) private readonly emailQueue: Queue,
   ) {}
 
@@ -60,6 +62,11 @@ export class AdminService {
 
     song.status = song.dropAt && song.dropAt > new Date() ? SongStatus.SCHEDULED : SongStatus.LIVE;
     await this.songs.save(song);
+
+    // BL-61: enqueue 24h + 1h BullMQ delayed notification jobs when song is SCHEDULED
+    if (song.status === SongStatus.SCHEDULED) {
+      await this.dropsService.enqueueDropJobs(song);
+    }
 
     await this.auditService.log(adminId, 'SONG_APPROVED', 'SONG', songId);
 
