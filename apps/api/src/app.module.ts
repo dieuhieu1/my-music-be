@@ -36,6 +36,8 @@ import { FeedModule } from './modules/feed/feed.module';
 import { DownloadsModule } from './modules/downloads/downloads.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { DropsModule } from './modules/drops/drops.module';
+import { ReportsModule } from './modules/reports/reports.module';
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -128,6 +130,10 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
     // ── Phase 8: Drops & Notifications ────────────────────────────────
     DropsModule,
+
+    // ── Phase 9: Reports, Analytics & Admin Tools ─────────────────────
+    ReportsModule,
+    AnalyticsModule,
   ],
   providers: [
     // Global rate limiting

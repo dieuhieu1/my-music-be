@@ -103,6 +103,13 @@ export class MailService {
 <p><strong>${songTitle}</strong> has been restored and is now live again on My Music.</p>`;
   }
 
+  // Phase 9: report takedown (BL-38)
+  songTakenDownEmail(songTitle: string): string {
+    return `<h2>Content Taken Down</h2>
+<p>Your song <strong>${songTitle}</strong> has been taken down following a community report.</p>
+<p>If you believe this was done in error, please contact support.</p>`;
+  }
+
   // ── Drop email templates (Phase 8 — BL-61, BL-63, BL-65) ─────────────────
 
   upcomingDropEmail(songTitle: string, artistName: string, dropAt: Date, is24h: boolean): string {

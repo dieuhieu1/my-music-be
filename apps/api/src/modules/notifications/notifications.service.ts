@@ -105,6 +105,8 @@ export class NotificationsService {
           title: 'Drop Rescheduled',
           body: `"${songTitle}" by ${artistName} has been rescheduled.`,
         };
+      case NotificationType.SONG_TAKEN_DOWN:
+        return { title: 'Content Taken Down', body: `"${songTitle}" has been taken down following a report.` };
       default:
         return { title: 'Notification', body: 'You have a new notification.' };
     }

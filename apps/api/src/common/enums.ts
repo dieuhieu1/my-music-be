@@ -29,6 +29,7 @@ export enum NotificationType {
   NEW_RELEASE = 'NEW_RELEASE',          // BL-64: drop fired
   DROP_CANCELLED = 'DROP_CANCELLED',
   DROP_RESCHEDULED = 'DROP_RESCHEDULED',
+  SONG_TAKEN_DOWN = 'SONG_TAKEN_DOWN',   // Phase 9: report takedown cascade
 }
 
 export enum PaymentProvider {

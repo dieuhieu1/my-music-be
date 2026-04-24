@@ -439,6 +439,65 @@ export class PaymentsService {
     }
   }
 
+  // ── Phase 9: admin grant premium by custom durationDays (BL-75) ──────────────
+
+  async adminGrantPremiumByDays(
+    targetUserId: string,
+    durationDays: number,
+  ): Promise<void> {
+    const user = await this.findUserOrFail(targetUserId);
+    const expiresAt = addDays(new Date(), durationDays);
+    const downloadLimit = user.roles.includes(Role.ARTIST)
+      ? DOWNLOAD_QUOTA.ARTIST_PREMIUM
+      : DOWNLOAD_QUOTA.USER_PREMIUM;
+
+    const record = this.paymentRecords.create({
+      userId: user.id,
+      provider: PaymentProvider.ADMIN,
+      amountVnd: 0,
+      premiumType: null as any, // nullable for custom-duration grants (migration 1714000002000)
+      status: PaymentStatus.ADMIN_GRANTED,
+      expiresAt,
+    });
+
+    const qr = this.dataSource.createQueryRunner();
+    await qr.connect();
+    await qr.startTransaction();
+    try {
+      await qr.manager.save(PaymentRecord, record);
+
+      const newRoles = user.roles.includes(Role.PREMIUM)
+        ? user.roles
+        : [...user.roles, Role.PREMIUM];
+
+      await qr.manager.update(User, user.id, {
+        roles: newRoles,
+        premiumExpiresAt: expiresAt,
+        downloadQuota: downloadLimit,
+      });
+
+      await qr.commitTransaction();
+    } catch (err) {
+      await qr.rollbackTransaction();
+      throw err;
+    } finally {
+      await qr.release();
+    }
+
+    await this.notificationsService.create(user.id, NotificationType.PREMIUM_ACTIVATED, {
+      expiresAt: expiresAt.toISOString(),
+    });
+    try {
+      await this.mailService.send({
+        to: user.email,
+        subject: 'MyMusic Premium Activated!',
+        html: this.mailService.premiumActivatedEmail(expiresAt),
+      });
+    } catch {
+      this.logger.warn(`adminGrantPremiumByDays: email failed for ${user.email}`);
+    }
+  }
+
   // ── Hourly cron: expire premium ────────────────────────────────────────────
 
   @Cron('0 * * * *')
