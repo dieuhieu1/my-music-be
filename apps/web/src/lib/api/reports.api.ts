@@ -1,30 +1,40 @@
 import apiClient from './axios';
 
-export type ReportTargetType = 'SONG' | 'PLAYLIST' | 'ARTIST' | 'USER';
+export type ReportTargetType = 'SONG' | 'PLAYLIST' | 'ARTIST';
 export type ReportReason = 'EXPLICIT' | 'COPYRIGHT' | 'INAPPROPRIATE';
+export type ReportStatus = 'PENDING' | 'DISMISSED' | 'RESOLVED';
+
+export interface Report {
+  id: string;
+  reporterId: string;
+  targetType: ReportTargetType;
+  targetId: string;
+  reason: ReportReason;
+  status: ReportStatus;
+  notes: string | null;
+  resolvedById: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+}
 
 export const reportsApi = {
-  // E5: Submit a content report
   createReport: (dto: {
     targetType: ReportTargetType;
     targetId: string;
     reason: ReportReason;
-    description?: string;
   }) => apiClient.post('/reports', dto),
 
-  // L4 Admin: List content reports
   getReports: (params?: {
+    status?: ReportStatus;
+    targetType?: ReportTargetType;
+    reason?: ReportReason;
     page?: number;
-    limit?: number;
-    status?: string;
-    reason?: string;
+    size?: number;
   }) => apiClient.get('/admin/reports', { params }),
 
-  // L4 Admin: Dismiss a report
-  dismissReport: (reportId: string) =>
-    apiClient.patch(`/admin/reports/${reportId}/dismiss`),
+  dismissReport: (reportId: string, notes?: string) =>
+    apiClient.patch(`/admin/reports/${reportId}/dismiss`, { notes }),
 
-  // L4 Admin: Take down content via a report
-  takeDownReport: (reportId: string) =>
-    apiClient.patch(`/admin/reports/${reportId}/take-down`),
+  takedownReport: (reportId: string, notes?: string) =>
+    apiClient.patch(`/admin/reports/${reportId}/takedown`, { notes }),
 };

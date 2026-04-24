@@ -1,12 +1,13 @@
 'use client';
 
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { MoreHorizontal, ListPlus, Download } from 'lucide-react';
+import { MoreHorizontal, ListPlus, Download, Flag } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 
 interface SongContextMenuProps {
   onAddToQueue?: () => void;
   onDownload?: () => void;
+  onReport?: () => void;
 }
 
 const itemStyle: React.CSSProperties = {
@@ -18,12 +19,12 @@ const itemStyle: React.CSSProperties = {
   transition: 'background 0.12s ease',
 };
 
-export function SongContextMenu({ onAddToQueue, onDownload }: SongContextMenuProps) {
+export function SongContextMenu({ onAddToQueue, onDownload, onReport }: SongContextMenuProps) {
   const { isPremium } = useAuthStore();
   const premium = isPremium();
   const hasDownload = premium && !!onDownload;
 
-  if (!onAddToQueue && !hasDownload) return null;
+  if (!onAddToQueue && !hasDownload && !onReport) return null;
 
   return (
     <Dropdown.Root>
@@ -88,6 +89,25 @@ export function SongContextMenu({ onAddToQueue, onDownload }: SongContextMenuPro
               >
                 <Download size={14} color="var(--gold)" />
                 Download
+              </Dropdown.Item>
+            </>
+          )}
+
+          {onReport && (
+            <>
+              {(onAddToQueue || hasDownload) && (
+                <Dropdown.Separator style={{
+                  height: 1, background: 'rgba(255,255,255,0.06)', margin: '4px 0',
+                }} />
+              )}
+              <Dropdown.Item
+                onSelect={onReport}
+                style={{ ...itemStyle, color: 'rgba(220,80,80,0.7)' }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(220,80,80,0.05)'; }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; }}
+              >
+                <Flag size={14} color="rgba(220,80,80,0.7)" />
+                Report
               </Dropdown.Item>
             </>
           )}

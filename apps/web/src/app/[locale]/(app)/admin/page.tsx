@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   Library, Tags, ClipboardList, ArrowRight, Clock,
-  CheckCircle2, XCircle,
+  CheckCircle2, Users, Flag, CreditCard,
 } from 'lucide-react';
 import { adminApi, type GenreSuggestion } from '@/lib/api/admin.api';
 import type { Song } from '@/lib/api/songs.api';
@@ -14,7 +14,7 @@ import type { Song } from '@/lib/api/songs.api';
 function StatCard({
   value, label, href, locale, accent = false, idx,
 }: {
-  value: number;
+  value: number | string;
   label: string;
   href: string;
   locale: string;
@@ -111,27 +111,7 @@ function QuickLink({
   );
 }
 
-// ── Recent suggestion row ─────────────────────────────────────────────────────
-function RecentSuggestionRow({ suggestion }: { suggestion: GenreSuggestion }) {
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 12,
-      padding: '10px 0', borderBottom: '1px solid rgba(42,37,32,0.4)',
-    }}>
-      <Tags size={13} color="var(--muted-text)" style={{ flexShrink: 0 }} />
-      <p style={{ flex: 1, color: 'var(--ivory)', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {suggestion.name}
-      </p>
-      <span style={{ color: 'var(--muted-text)', fontSize: '0.68rem' }}>
-        {fmtDate(suggestion.createdAt)}
-      </span>
-    </div>
-  );
-}
-
-// ── Recent pending song row ───────────────────────────────────────────────────
+// ── Recent song row ───────────────────────────────────────────────────────────
 function RecentSongRow({ song }: { song: Song }) {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -163,18 +143,33 @@ function RecentSongRow({ song }: { song: Song }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function AdminDashboardPage() {
   const { locale } = useParams<{ locale: string }>();
-  const [songs, setSongs]             = useState<Song[]>([]);
-  const [suggestions, setSuggestions] = useState<GenreSuggestion[]>([]);
-  const [loading, setLoading]         = useState(true);
+
+  const [pendingSongs, setPendingSongs]       = useState(0);
+  const [recentSongs, setRecentSongs]         = useState<Song[]>([]);
+  const [openReports, setOpenReports]         = useState(0);
+  const [totalUsers, setTotalUsers]           = useState(0);
+  const [suggestions, setSuggestions]         = useState<GenreSuggestion[]>([]);
+  const [loading, setLoading]                 = useState(true);
 
   useEffect(() => {
     Promise.allSettled([
-      adminApi.getSongQueue(),
+      adminApi.getSongs({ status: 'PENDING', size: 5 }),
+      adminApi.getReports({ status: 'PENDING', size: 1 }),
+      adminApi.getUsers({ size: 1 }),
       adminApi.getGenreSuggestions(),
-    ]).then(([songRes, suggRes]) => {
+    ]).then(([songRes, reportRes, userRes, suggRes]) => {
       if (songRes.status === 'fulfilled') {
         const d = (songRes.value.data as any).data ?? songRes.value.data;
-        setSongs(Array.isArray(d) ? d : []);
+        setPendingSongs(d.totalItems ?? 0);
+        setRecentSongs(Array.isArray(d.items) ? d.items.slice(0, 5) : []);
+      }
+      if (reportRes.status === 'fulfilled') {
+        const d = (reportRes.value.data as any).data ?? reportRes.value.data;
+        setOpenReports(d.totalItems ?? 0);
+      }
+      if (userRes.status === 'fulfilled') {
+        const d = (userRes.value.data as any).data ?? userRes.value.data;
+        setTotalUsers(d.totalItems ?? 0);
       }
       if (suggRes.status === 'fulfilled') {
         const d = (suggRes.value.data as any).data ?? suggRes.value.data;
@@ -183,10 +178,8 @@ export default function AdminDashboardPage() {
     }).finally(() => setLoading(false));
   }, []);
 
-  const pendingSongs    = songs.length;
-  const pendingSuggestions = suggestions.filter((s) => s.status === 'PENDING').length;
-  const recentSongs     = songs.slice(0, 5);
-  const recentSuggestions = suggestions.filter((s) => s.status === 'PENDING').slice(0, 5);
+  const pendingSuggestions  = suggestions.filter((s) => s.status === 'PENDING').length;
+  const recentSuggestions   = suggestions.filter((s) => s.status === 'PENDING').slice(0, 5);
 
   if (loading) {
     return (
@@ -203,12 +196,11 @@ export default function AdminDashboardPage() {
   return (
     <div style={{ padding: '32px 32px', position: 'relative', overflow: 'hidden' }}>
 
-      {/* Ambient background orbs */}
+      {/* Ambient orb */}
       <div style={{
         position: 'absolute', top: '-15%', right: '-5%', width: 400, height: 400,
         borderRadius: '50%', background: 'rgba(232,184,75,0.04)',
         filter: 'blur(80px)', pointerEvents: 'none', zIndex: 0,
-        animation: 'auroraShift1 18s ease-in-out infinite',
       }} />
 
       <div style={{ position: 'relative', zIndex: 1 }}>
@@ -226,7 +218,7 @@ export default function AdminDashboardPage() {
             Dashboard
           </h1>
           <p style={{ color: 'var(--muted-text)', fontSize: '0.82rem', marginTop: 6 }}>
-            Moderation overview — review queues and recent activity.
+            Moderation overview — review queues and activity at a glance.
           </p>
         </div>
 
@@ -236,34 +228,15 @@ export default function AdminDashboardPage() {
           gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
           gap: 16, marginBottom: 40,
         }}>
-          <StatCard
-            value={pendingSongs}
-            label="Songs awaiting review"
-            href="/admin/songs"
-            locale={locale}
-            accent={pendingSongs > 0}
-            idx={0}
-          />
-          <StatCard
-            value={pendingSuggestions}
-            label="Genre suggestions pending"
-            href="/admin/genres"
-            locale={locale}
-            accent={pendingSuggestions > 0}
-            idx={1}
-          />
-          <StatCard
-            value={suggestions.filter((s) => s.status === 'APPROVED').length}
-            label="Genres approved total"
-            href="/admin/genres"
-            locale={locale}
-            idx={2}
-          />
+          <StatCard value={pendingSongs}       label="Songs awaiting review"    href="/admin/songs"    locale={locale} accent={pendingSongs > 0}    idx={0} />
+          <StatCard value={openReports}        label="Open content reports"     href="/admin/reports"  locale={locale} accent={openReports > 0}     idx={1} />
+          <StatCard value={totalUsers}         label="Registered users"         href="/admin/users"    locale={locale}                              idx={2} />
+          <StatCard value={pendingSuggestions} label="Genre suggestions pending" href="/admin/genres"  locale={locale} accent={pendingSuggestions > 0} idx={3} />
         </div>
 
         <div style={{ height: 1, background: 'linear-gradient(to right, transparent, #2a2520, transparent)', marginBottom: 40 }} />
 
-        {/* Two-column layout: recent queues + quick links */}
+        {/* Two-column: recent queues */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32, marginBottom: 40 }}>
 
           {/* Pending songs preview */}
@@ -320,7 +293,20 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <div style={{ background: '#111', border: '1px solid rgba(42,37,32,0.5)', borderRadius: 8, padding: '4px 16px' }}>
-                {recentSuggestions.map((s) => <RecentSuggestionRow key={s.id} suggestion={s} />)}
+                {recentSuggestions.map((s) => (
+                  <div key={s.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 0', borderBottom: '1px solid rgba(42,37,32,0.4)',
+                  }}>
+                    <Tags size={13} color="var(--muted-text)" style={{ flexShrink: 0 }} />
+                    <p style={{ flex: 1, color: 'var(--ivory)', fontSize: '0.82rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {s.name}
+                    </p>
+                    <span style={{ color: 'var(--muted-text)', fontSize: '0.68rem' }}>
+                      {new Date(s.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                    </span>
+                  </div>
+                ))}
                 {pendingSuggestions > 5 && (
                   <p style={{ fontSize: '0.7rem', color: 'var(--muted-text)', padding: '10px 0', textAlign: 'center' }}>
                     +{pendingSuggestions - 5} more pending
@@ -337,9 +323,12 @@ export default function AdminDashboardPage() {
             Quick Access
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <QuickLink href="/admin/songs"  locale={locale} Icon={Library}       label="Song Queue"       description="Review pending uploads from artists"         idx={0} />
-            <QuickLink href="/admin/genres" locale={locale} Icon={Tags}          label="Genre Suggestions" description="Approve or reject artist genre proposals"    idx={1} />
-            <QuickLink href="/admin/audit"  locale={locale} Icon={ClipboardList} label="Audit Log"        description="Immutable record of all admin actions"        idx={2} />
+            <QuickLink href="/admin/songs"    locale={locale} Icon={Library}       label="Song Queue"        description="Review pending uploads from artists"         idx={0} />
+            <QuickLink href="/admin/users"    locale={locale} Icon={Users}         label="User Management"   description="View users, manage roles and premium"        idx={1} />
+            <QuickLink href="/admin/reports"  locale={locale} Icon={Flag}          label="Content Reports"   description="Review and action flagged content"           idx={2} />
+            <QuickLink href="/admin/payments" locale={locale} Icon={CreditCard}    label="Payments"          description="View payment records and manage premium"     idx={3} />
+            <QuickLink href="/admin/genres"   locale={locale} Icon={Tags}          label="Genre Suggestions" description="Approve or reject artist genre proposals"    idx={4} />
+            <QuickLink href="/admin/audit"    locale={locale} Icon={ClipboardList} label="Audit Log"         description="Immutable record of all admin actions"       idx={5} />
           </div>
         </div>
       </div>

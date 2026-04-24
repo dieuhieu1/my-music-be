@@ -128,9 +128,15 @@ const ACTION_OPTIONS = [
   'SONG_REJECTED',
   'SONG_REUPLOAD_REQUIRED',
   'SONG_RESTORED',
+  'SONG_TAKEN_DOWN',
   'GENRE_SUGGESTION_APPROVED',
   'GENRE_SUGGESTION_REJECTED',
   'SONG_RESUBMITTED',
+  'USER_ROLES_UPDATED',
+  'PREMIUM_GRANTED',
+  'PREMIUM_REVOKED',
+  'REPORT_DISMISSED',
+  'REPORT_RESOLVED',
 ];
 
 export default function AdminAuditPage() {
@@ -145,14 +151,14 @@ export default function AdminAuditPage() {
   const load = useCallback(async (p: number, action: string) => {
     setLoading(true);
     try {
-      const res = await adminApi.getAuditLogs({
-        page:   p,
-        limit,
+      const res = await adminApi.getAudit({
+        page: p,
+        size: limit,
         action: action !== 'ALL' ? action : undefined,
       });
       const d = (res.data as any).data ?? res.data;
       setEntries(Array.isArray(d.items) ? d.items : []);
-      setTotal(d.total ?? 0);
+      setTotal(d.totalItems ?? d.total ?? 0);
     } catch {
       setEntries([]);
     } finally {
