@@ -32,7 +32,7 @@ const DOWNLOAD_LIMITS: Partial<Record<string, number>> = {
 };
 
 const LICENSE_JWT_TTL_DAYS = 30;
-// Resolved from StorageService at call time via getBuckets().audioEnc
+
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -125,11 +125,10 @@ export class DownloadsService {
       { algorithm: 'HS256', expiresIn: `${LICENSE_JWT_TTL_DAYS}d` },
     );
 
-    // 5-minute presigned URL for the .enc file
-    const encFileName = `${songId}.enc`;
+    // 5-minute presigned URL for the encrypted file
     const downloadUrl = await this.storageService.presignedGetObject(
-      this.storageService.getBuckets().audioEnc,
-      encFileName,
+      this.storageService.getBuckets().audio,
+      song.encryptedFileUrl,
       5 * 60,
     );
 

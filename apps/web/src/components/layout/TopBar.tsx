@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, User, LogOut, Music2, Shield, KeyRound, LayoutDashboard } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User, LogOut, Music2, Shield, KeyRound, LayoutDashboard, Crown } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
 import { Role } from '@mymusic/types';
@@ -177,14 +177,14 @@ export default function TopBar() {
                 {/* Menu items */}
                 <div style={{ padding: '6px 0' }}>
                   <DropItem href={getRoleHome(user?.roles, locale)} icon={<LayoutDashboard size={13} />} label="Home"          onClick={() => setOpen(false)} />
-                  <DropItem href={`/${locale}/profile`}          icon={<User size={13} />}            label="Profile"         onClick={() => setOpen(false)} />
+                  <DropItem href={`/${locale}/profile`}          icon={<User size={13} />}            label="Account"         onClick={() => setOpen(false)} />
+                  <DropItem href={`/${locale}/profile/premium`}  icon={<Crown size={13} />}           label="Premium"         onClick={() => setOpen(false)} />
                   {isArtist && (
                     <DropItem href={`/${locale}/artist/profile`} icon={<Music2 size={13} />}          label="Artist Studio"   onClick={() => setOpen(false)} />
                   )}
                   {isAdmin && (
-                    <DropItem href={`/${locale}/admin`}          icon={<Shield size={13} />}          label="Admin Panel"     onClick={() => setOpen(false)} />
+                    <DropItem href={`/${locale}/admin`}          icon={<Shield size={13} />}          label="Admin Portal"    onClick={() => setOpen(false)} />
                   )}
-                  <DropItem href={`/${locale}/profile/password`} icon={<KeyRound size={13} />}        label="Change Password" onClick={() => setOpen(false)} />
                 </div>
 
                 <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '0' }} />

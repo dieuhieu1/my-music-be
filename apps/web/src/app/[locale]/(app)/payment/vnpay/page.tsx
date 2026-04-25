@@ -2,48 +2,47 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useRouter, useParams } from 'next/navigation';
-import { paymentsApi } from '@/lib/api/payments.api';
 import { usersApi } from '@/lib/api/users.api';
 import { useAuthStore } from '@/store/useAuthStore';
 import { PaymentResultCard } from '@/components/payment/PaymentResultCard';
 
 function VNPayHandler() {
-  const searchParams          = useSearchParams();
-  const router                = useRouter();
-  const { locale }            = useParams<{ locale: string }>();
-  const { setUser }           = useAuthStore();
-  const called                = useRef(false);
+  const searchParams = useSearchParams();
+  const router       = useRouter();
+  const { locale }   = useParams<{ locale: string }>();
+  const { setUser }  = useAuthStore();
+  const called       = useRef(false);
 
-  const [status, setStatus]           = useState<'loading' | 'success' | 'error'>('loading');
-  const [expiryDate, setExpiryDate]   = useState<string | null>(null);
-  const [errorMsg, setErrorMsg]       = useState<string | undefined>();
+  const [status, setStatus]         = useState<'loading' | 'success' | 'error'>('loading');
+  const [expiryDate, setExpiryDate] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg]     = useState<string | undefined>();
 
   useEffect(() => {
     if (called.current) return;
     called.current = true;
 
-    const params = Object.fromEntries(searchParams.entries());
+    // Backend verifies signature + grants premium, then redirects here with ?status=success|failed
+    const paymentStatus = searchParams.get('status');
 
-    const verify = async () => {
-      try {
-        await paymentsApi.verifyVnpay(params);
-        const meRes = await usersApi.getMe();
-        const me    = meRes.data?.data ?? meRes.data;
-        setUser(me);
-        setExpiryDate(me.premiumExpiryDate ?? null);
-        setStatus('success');
-      } catch {
-        const code = params.vnp_ResponseCode;
-        setErrorMsg(
-          code !== '00'
-            ? 'Your payment was declined by the gateway.'
-            : 'Verification failed. Please contact support if your account was charged.',
-        );
+    const finish = async () => {
+      if (paymentStatus === 'success') {
+        try {
+          const meRes = await usersApi.getMe();
+          const me    = meRes.data?.data ?? meRes.data;
+          setUser(me);
+          setExpiryDate(me.premiumExpiryDate ?? null);
+          setStatus('success');
+        } catch {
+          setErrorMsg('Payment succeeded but failed to refresh your account. Please reload.');
+          setStatus('error');
+        }
+      } else {
+        setErrorMsg('Your payment was declined or cancelled.');
         setStatus('error');
       }
     };
 
-    verify();
+    finish();
   }, [searchParams, setUser]);
 
   return (

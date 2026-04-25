@@ -18,6 +18,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { FeedModule } from '../feed/feed.module';
 import { AuditModule } from '../audit/audit.module';
 import { StorageModule } from '../storage/storage.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { StorageModule } from '../storage/storage.module';
     FeedModule,
     AuditModule,
     StorageModule,
+    MailModule,
   ],
   controllers: [DropsController],
   providers: [DropsService, DropNotificationWorker],

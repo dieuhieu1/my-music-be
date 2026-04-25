@@ -66,17 +66,37 @@ function getPremiumDownloadLimit(roles: Role[]): number {
   return roles.includes(Role.ARTIST) ? DOWNLOAD_QUOTA.ARTIST_PREMIUM : DOWNLOAD_QUOTA.USER_PREMIUM;
 }
 
-// VNPay: sort params alphabetically, join as encoded query string, HMAC-SHA512
+// VNPay official demo encodes values with encodeURIComponent + replaces %20 with +
+// The SAME encoded values are used for both the raw signature string and the payment URL.
+function vnpEncode(value: string): string {
+  return encodeURIComponent(value).replace(/%20/g, '+');
+}
+
 function buildVnpaySignature(
   params: Record<string, string>,
   secret: string,
 ): string {
-  const sortedKeys = Object.keys(params).sort();
-  const raw = sortedKeys
+  const raw = Object.keys(params)
+    .sort()
     .filter((k) => params[k] !== undefined && params[k] !== '')
-    .map((k) => `${k}=${params[k]}`)
+    .map((k) => `${k}=${vnpEncode(params[k])}`)
     .join('&');
   return createHmac('sha512', secret).update(Buffer.from(raw, 'utf-8')).digest('hex');
+}
+
+// Normalize IP: convert IPv6-mapped IPv4 (::ffff:x.x.x.x) to plain IPv4
+function normalizeIp(ip: string): string {
+  if (ip.startsWith('::ffff:')) return ip.slice(7);
+  if (ip === '::1') return '127.0.0.1';
+  return ip;
+}
+
+// VNPay expects createDate in Vietnam time (GMT+7), format YYYYMMDDHHmmss
+function vnpayCreateDate(): string {
+  const now    = new Date();
+  const offset = 7 * 60 * 60 * 1000;
+  const vn     = new Date(now.getTime() + offset);
+  return vn.toISOString().replace(/[-T:.Z]/g, '').slice(0, 14);
 }
 
 // MoMo: fixed key order required by MoMo API v2
@@ -140,31 +160,27 @@ export class PaymentsService {
     await this.paymentRecords.save(record);
 
     const vnpConfig = this.config.get('payment.vnpay');
-    const now = new Date();
-    const createDate = now
-      .toISOString()
-      .replace(/[-T:.Z]/g, '')
-      .slice(0, 14);
 
     const params: Record<string, string> = {
-      vnp_Version: '2.1.0',
-      vnp_Command: 'pay',
-      vnp_TmnCode: vnpConfig.tmnCode,
-      vnp_Amount: String(PREMIUM_PRICE_VND[dto.premiumType] * 100),
-      vnp_CurrCode: 'VND',
-      vnp_TxnRef: record.id,
+      vnp_Version:   '2.1.0',
+      vnp_Command:   'pay',
+      vnp_TmnCode:   vnpConfig.tmnCode,
+      vnp_Amount:    String(PREMIUM_PRICE_VND[dto.premiumType] * 100),
+      vnp_CurrCode:  'VND',
+      vnp_TxnRef:    record.id,
       vnp_OrderInfo: `MyMusic Premium ${dto.premiumType}`,
       vnp_OrderType: 'other',
-      vnp_Locale: 'vn',
+      vnp_Locale:    'vn',
       vnp_ReturnUrl: vnpConfig.callbackUrl,
-      vnp_IpAddr: clientIp,
-      vnp_CreateDate: createDate,
+      vnp_IpAddr:    normalizeIp(clientIp),
+      vnp_CreateDate: vnpayCreateDate(),
     };
 
-    const secureHash = buildVnpaySignature(params, vnpConfig.hashSecret);
+    const secureHash  = buildVnpaySignature(params, vnpConfig.hashSecret);
+    // URL uses the same vnpEncode values as the signature (VNPay official demo pattern)
     const queryString = Object.keys(params)
       .sort()
-      .map((k) => `${k}=${encodeURIComponent(params[k])}`)
+      .map((k) => `${k}=${vnpEncode(params[k])}`)
       .join('&');
 
     return { paymentUrl: `${vnpConfig.url}?${queryString}&vnp_SecureHash=${secureHash}` };

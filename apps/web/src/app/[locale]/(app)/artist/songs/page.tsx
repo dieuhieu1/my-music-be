@@ -3,9 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Upload, Pencil, Trash2, Music2, Clock, AlertCircle, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { Upload, Pencil, Trash2, Music2, Clock, AlertCircle, CheckCircle2, XCircle, RefreshCw, Play, Pause } from 'lucide-react';
 import { songsApi, type Song } from '@/lib/api/songs.api';
 import { SongStatus } from '@mymusic/types';
+import { usePlayer } from '@/hooks/usePlayer';
+import { usePlayerStore } from '@/store/usePlayerStore';
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -52,6 +54,15 @@ function SongRow({ song, locale, onDelete }: { song: Song; locale: string; onDel
   const [hov, setHov] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { playSong, togglePlay } = usePlayer();
+  const { currentSong, isPlaying } = usePlayerStore();
+  const isActive = currentSong?.id === song.id;
+
+  const handlePreview = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isActive) { togglePlay(); return; }
+    playSong({ id: song.id, title: song.title, artistName: '', coverArtUrl: song.coverArtUrl, fileUrl: '', durationSeconds: song.duration ?? 0 });
+  };
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -83,16 +94,32 @@ function SongRow({ song, locale, onDelete }: { song: Song; locale: string; onDel
         transition: 'background 0.15s',
       }}
     >
-      {/* Cover art */}
-      <div className={`anim-scale-reveal`} style={{
-        width: 44, height: 44, borderRadius: 4, flexShrink: 0, overflow: 'hidden',
-        background: 'rgba(232,184,75,0.05)', border: '1px solid rgba(232,184,75,0.1)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
+      {/* Cover art with play overlay */}
+      <div
+        onClick={handlePreview}
+        style={{
+          width: 44, height: 44, borderRadius: 4, flexShrink: 0, overflow: 'hidden',
+          background: 'rgba(232,184,75,0.05)', border: `1px solid ${isActive ? 'rgba(232,184,75,0.35)' : 'rgba(232,184,75,0.1)'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          position: 'relative', cursor: 'pointer',
+          transition: 'border-color 0.2s',
+        }}
+      >
         {song.coverArtUrl
           ? <img src={song.coverArtUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Music2 size={18} color="rgba(232,184,75,0.3)" />
         }
+        {hov && (
+          <div style={{
+            position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 4,
+          }}>
+            {isActive && isPlaying
+              ? <Pause size={16} fill="var(--ivory)" color="var(--ivory)" />
+              : <Play  size={16} fill="var(--ivory)" color="var(--ivory)" style={{ marginLeft: 2 }} />
+            }
+          </div>
+        )}
       </div>
 
       {/* Title + status */}

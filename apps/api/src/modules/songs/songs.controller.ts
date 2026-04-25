@@ -28,6 +28,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { Role } from '../../common/enums';
 
 // Shared multer config — 50 MB limit covers both audio and cover art
@@ -98,7 +99,7 @@ export class SongsController {
   // ── GET /songs/:id (BL-09: increments listenCount for LIVE songs) ──────────
 
   @Get(':id')
-  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   findOne(
     @CurrentUser('id') requesterId: string | null,
     @Param('id', ParseUUIDPipe) songId: string,

@@ -38,7 +38,7 @@ function QuotaHeader({ used, quota }: { used: number; quota: number }) {
 export default function DownloadsPage() {
   const { locale }                        = useParams<{ locale: string }>();
   const router                            = useRouter();
-  const { isPremium, hasRole }            = useAuthStore();
+  const { isPremium, hasRole, isLoading: authLoading } = useAuthStore();
   const [records, setRecords]             = useState<DownloadRecord[]>([]);
   const [quotaUsed, setQuotaUsed]         = useState(0);
   const [quota, setQuota]                 = useState(100);
@@ -49,6 +49,7 @@ export default function DownloadsPage() {
   const premium = isPremium();
 
   useEffect(() => {
+    if (authLoading) return;                                          // wait for auth hydration
     if (!premium) { router.push(`/${locale}/payment`); return; }
 
     downloadsApi.getDownloads()
@@ -77,7 +78,7 @@ export default function DownloadsPage() {
       })
       .catch(() => setRecords([]))
       .finally(() => setLoading(false));
-  }, [premium, locale, router, hasRole]);
+  }, [authLoading, premium, locale, router, hasRole]);
 
   const handleRemove = async (songId: string) => {
     setRemoving(songId);
@@ -95,7 +96,7 @@ export default function DownloadsPage() {
   };
 
   // ── Loading ────────────────────────────────────────────────────────────────
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '80px 24px' }}>
         <div

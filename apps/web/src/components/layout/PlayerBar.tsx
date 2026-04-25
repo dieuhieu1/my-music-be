@@ -3,32 +3,34 @@
 import { useRef, useState, useEffect } from 'react';
 import {
   SkipBack, SkipForward, Play, Pause,
-  Volume2, VolumeX, ListMusic, Music2,
+  Volume2, VolumeX, ListMusic, Music2, Repeat, Repeat1,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { usePlayer } from '@/hooks/usePlayer';
 
-// ── WaveBar visualizer ────────────────────────────────────────────────────────
+// ── Animated wave bars ────────────────────────────────────────────────────────
 function WaveBar({ isPlaying }: { isPlaying: boolean }) {
+  const heights = [9, 14, 11, 14, 9];
   return (
-    <div style={{ display: 'flex', gap: 2.5, alignItems: 'flex-end', height: 14 }}>
-      {[0, 0.1, 0.2, 0.3, 0.15].map((delay, i) => (
+    <div style={{ display: 'flex', gap: 2.5, alignItems: 'center', height: 16 }}>
+      {heights.map((h, i) => (
         <div key={i} style={{
-          width: 3, height: 14, borderRadius: 2,
-          background: 'var(--gold)',
-          animation: 'waveBar 0.8s ease-in-out infinite',
-          animationDelay: `${delay}s`,
-          animationPlayState: isPlaying ? 'running' : 'paused',
-          transformOrigin: 'bottom',
+          width: 3, borderRadius: 2,
+          height: isPlaying ? h : 4,
+          background: isPlaying ? 'var(--gold)' : 'rgba(232,184,75,0.3)',
+          animation: isPlaying ? 'waveBar 0.8s ease-in-out infinite' : 'none',
+          animationDelay: `${i * 0.1}s`,
+          transformOrigin: 'center',
+          transition: 'height 0.3s ease, background 0.3s ease',
         }} />
       ))}
     </div>
   );
 }
 
-// ── Marquee title (scrolls when too wide) ─────────────────────────────────────
+// ── Marquee title ─────────────────────────────────────────────────────────────
 function MarqueeTitle({ title, maxWidth }: { title: string; maxWidth: number }) {
   const spanRef = useRef<HTMLSpanElement>(null);
   const [overflow, setOverflow] = useState(false);
@@ -50,7 +52,8 @@ function MarqueeTitle({ title, maxWidth }: { title: string; maxWidth: number }) 
         style={{
           display: 'inline-block', whiteSpace: 'nowrap',
           animation: overflow ? `marqueeScroll ${duration}s linear infinite` : 'none',
-          color: 'var(--ivory)', fontSize: '0.87rem', fontWeight: 500,
+          color: 'var(--ivory)', fontSize: '0.9rem', fontWeight: 600,
+          letterSpacing: '-0.01em',
         }}
       >
         {title}
@@ -59,12 +62,53 @@ function MarqueeTitle({ title, maxWidth }: { title: string; maxWidth: number }) 
   );
 }
 
+// ── Icon button helper ────────────────────────────────────────────────────────
+function IconBtn({
+  onClick, active = false, title, children, size = 32,
+}: {
+  onClick?: () => void;
+  active?: boolean;
+  title?: string;
+  children: React.ReactNode;
+  size?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      style={{
+        width: size, height: size, borderRadius: '50%',
+        background: active ? 'rgba(232,184,75,0.12)' : 'none',
+        border: 'none', cursor: 'pointer', padding: 0,
+        color: active ? 'var(--gold)' : 'var(--muted-text)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'color 0.15s, background 0.15s, transform 0.15s',
+        flexShrink: 0,
+      }}
+      onMouseEnter={e => {
+        e.currentTarget.style.color = active ? 'var(--gold)' : 'var(--ivory)';
+        e.currentTarget.style.background = active ? 'rgba(232,184,75,0.18)' : 'rgba(255,255,255,0.06)';
+        e.currentTarget.style.transform = 'scale(1.12)';
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.color = active ? 'var(--gold)' : 'var(--muted-text)';
+        e.currentTarget.style.background = active ? 'rgba(232,184,75,0.12)' : 'none';
+        e.currentTarget.style.transform = 'scale(1)';
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ── Player Bar ────────────────────────────────────────────────────────────────
 export default function PlayerBar() {
   const { locale } = useParams<{ locale: string }>();
-  const { currentSong, isPlaying, positionSeconds, volume } = usePlayerStore();
+  const { currentSong, isPlaying, positionSeconds, volume, repeatMode, cycleRepeat } = usePlayerStore();
   const { togglePlay, seek, setVolume } = usePlayer();
-  const barRef = useRef<HTMLDivElement>(null);
+  const barRef    = useRef<HTMLDivElement>(null);
+  const [hovering, setHovering] = useState(false);
 
   const duration = currentSong?.durationSeconds ?? 0;
   const progress = duration > 0 ? Math.min(100, (positionSeconds / duration) * 100) : 0;
@@ -84,16 +128,13 @@ export default function PlayerBar() {
   if (!currentSong) {
     return (
       <footer style={{
-        position: 'fixed', bottom: 0, left: 0, right: 0, height: 72, zIndex: 50,
-        background: 'rgba(13,13,13,0.92)',
-        backdropFilter: 'blur(16px)',
-        borderTop: '1px solid rgba(232,184,75,0.06)',
+        position: 'fixed', bottom: 0, left: 0, right: 0, height: 80, zIndex: 50,
+        background: 'rgba(11,11,11,0.96)',
+        backdropFilter: 'blur(20px)',
+        borderTop: '1px solid rgba(255,255,255,0.04)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
-        <p style={{
-          fontSize: '0.76rem', color: 'var(--muted-text)',
-          fontFamily: 'var(--font-body)', letterSpacing: '0.03em',
-        }}>
+        <p style={{ fontSize: '0.76rem', color: 'rgba(90,85,80,0.6)', fontFamily: 'var(--font-body)', letterSpacing: '0.04em' }}>
           Browse songs and press play to start listening
         </p>
       </footer>
@@ -103,52 +144,70 @@ export default function PlayerBar() {
   // ── Now playing ─────────────────────────────────────────────────────────────
   return (
     <footer style={{
-      position: 'fixed', bottom: 0, left: 0, right: 0, height: 72, zIndex: 50,
-      background: 'rgba(13,13,13,0.94)',
-      backdropFilter: 'blur(20px)',
-      borderTop: '1px solid rgba(232,184,75,0.09)',
+      position: 'fixed', bottom: 0, left: 0, right: 0, height: 88, zIndex: 50,
+      background: 'rgba(11,11,11,0.97)',
+      backdropFilter: 'blur(24px)',
+      borderTop: isPlaying
+        ? '1px solid rgba(232,184,75,0.18)'
+        : '1px solid rgba(255,255,255,0.05)',
+      transition: 'border-color 0.5s ease',
       display: 'flex', alignItems: 'center',
-      padding: '0 20px',
-      gap: 16,
+      padding: '0 24px',
+      gap: 20,
     }}>
 
-      {/* ── Left: artwork + info ─────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: 230, flexShrink: 0 }}>
-        {/* Circular album art */}
+      {/* Gold shimmer line at top when playing */}
+      {isPlaying && (
         <div style={{
-          width: 46, height: 46, borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-          border: '1.5px solid rgba(232,184,75,0.2)',
-          background: 'rgba(232,184,75,0.06)',
+          position: 'absolute', top: 0, left: 0, right: 0, height: 1,
+          background: 'linear-gradient(90deg, transparent 0%, rgba(232,184,75,0.5) 30%, rgba(232,184,75,0.8) 50%, rgba(232,184,75,0.5) 70%, transparent 100%)',
+          backgroundSize: '200% 100%',
+          animation: 'shimmerLine 3s linear infinite',
+          pointerEvents: 'none',
+        }} />
+      )}
+
+      {/* ── Left: artwork + info ─────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, width: 250, flexShrink: 0 }}>
+        {/* Album art */}
+        <div style={{
+          width: 54, height: 54, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+          border: isPlaying ? '1.5px solid rgba(232,184,75,0.35)' : '1.5px solid rgba(255,255,255,0.08)',
+          background: 'rgba(232,184,75,0.05)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: isPlaying ? '0 0 18px rgba(232,184,75,0.15)' : 'none',
-          transition: 'box-shadow 0.4s',
+          boxShadow: isPlaying ? '0 0 24px rgba(232,184,75,0.18)' : '0 4px 12px rgba(0,0,0,0.4)',
+          transition: 'border-color 0.4s, box-shadow 0.4s',
+          position: 'relative',
         }}>
           {currentSong.coverArtUrl ? (
             <img
               src={currentSong.coverArtUrl}
               alt={currentSong.title}
-              className={isPlaying ? 'vinyl-spin vinyl-glow' : ''}
-              style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+              style={{
+                width: '100%', height: '100%', objectFit: 'cover',
+                filter: isPlaying ? 'brightness(1.05)' : 'brightness(0.85)',
+                transition: 'filter 0.4s',
+              }}
             />
           ) : (
             <div
               className={isPlaying ? 'vinyl-spin' : ''}
               style={{
-                width: '100%', height: '100%', borderRadius: '50%',
-                background: 'radial-gradient(circle at 30% 30%, #2a2520, #111)',
+                width: '100%', height: '100%', borderRadius: 7,
+                background: 'radial-gradient(circle at 35% 35%, #2a2520, #111)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
-              <Music2 size={16} color="rgba(232,184,75,0.4)" />
+              <Music2 size={20} color="rgba(232,184,75,0.4)" />
             </div>
           )}
         </div>
 
         {/* Title + artist */}
         <div style={{ minWidth: 0, flex: 1 }}>
-          <MarqueeTitle title={currentSong.title} maxWidth={152} />
+          <MarqueeTitle title={currentSong.title} maxWidth={170} />
           <p style={{
-            color: 'var(--muted-text)', fontSize: '0.71rem', marginTop: 2,
+            color: 'var(--muted-text)', fontSize: '1rem', marginTop: 3,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>
             {currentSong.artistName}
@@ -156,138 +215,160 @@ export default function PlayerBar() {
         </div>
       </div>
 
-      {/* ── Center: controls + progress bar ──────────────────────────────── */}
+      {/* ── Center: controls + progress ──────────────────────────────────── */}
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column',
-        alignItems: 'center', gap: 5, minWidth: 0,
+        alignItems: 'center', gap: 8, minWidth: 0,
       }}>
-        {/* Control buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-          <button
-            type="button"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-              color: 'var(--muted-text)', display: 'flex',
-              transition: 'color 0.15s, transform 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--ivory)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted-text)'; e.currentTarget.style.transform = 'scale(1)'; }}
-          >
-            <SkipBack size={16} fill="currentColor" />
-          </button>
 
+        {/* Control buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <IconBtn title="Skip back" size={32}>
+            <SkipBack size={17} fill="currentColor" />
+          </IconBtn>
+
+          {/* Main play/pause */}
           <button
             type="button"
             onClick={togglePlay}
             style={{
-              width: 38, height: 38, borderRadius: '50%',
+              width: 46, height: 46, borderRadius: '50%',
               background: 'var(--gold)', border: 'none', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 16px rgba(232,184,75,0.28)',
-              transition: 'transform 0.2s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s',
+              boxShadow: isPlaying
+                ? '0 0 28px rgba(232,184,75,0.5), 0 0 8px rgba(232,184,75,0.3)'
+                : '0 0 16px rgba(232,184,75,0.25)',
+              transition: 'transform 0.2s cubic-bezier(0.16,1,0.3,1), box-shadow 0.3s',
               flexShrink: 0,
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.07)'; e.currentTarget.style.boxShadow = '0 0 26px rgba(232,184,75,0.45)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 0 16px rgba(232,184,75,0.28)'; }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.boxShadow = '0 0 36px rgba(232,184,75,0.6), 0 0 12px rgba(232,184,75,0.4)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = isPlaying
+                ? '0 0 28px rgba(232,184,75,0.5), 0 0 8px rgba(232,184,75,0.3)'
+                : '0 0 16px rgba(232,184,75,0.25)';
+            }}
           >
             {isPlaying
-              ? <Pause size={15} fill="#0d0d0d" color="#0d0d0d" />
-              : <Play size={15} fill="#0d0d0d" color="#0d0d0d" style={{ marginLeft: 2 }} />
+              ? <Pause size={17} fill="#0d0d0d" color="#0d0d0d" />
+              : <Play  size={17} fill="#0d0d0d" color="#0d0d0d" style={{ marginLeft: 2 }} />
             }
           </button>
 
-          <button
-            type="button"
-            style={{
-              background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-              color: 'var(--muted-text)', display: 'flex',
-              transition: 'color 0.15s, transform 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = 'var(--ivory)'; e.currentTarget.style.transform = 'scale(1.1)'; }}
-            onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted-text)'; e.currentTarget.style.transform = 'scale(1)'; }}
+          <IconBtn title="Skip forward" size={32}>
+            <SkipForward size={17} fill="currentColor" />
+          </IconBtn>
+
+          {/* Repeat button */}
+          <IconBtn
+            onClick={cycleRepeat}
+            active={repeatMode !== 'off'}
+            title={repeatMode === 'off' ? 'Repeat: off' : repeatMode === 'all' ? 'Repeat: all' : 'Repeat: one'}
+            size={32}
           >
-            <SkipForward size={16} fill="currentColor" />
-          </button>
+            {repeatMode === 'one'
+              ? <Repeat1 size={15} />
+              : <Repeat  size={15} />
+            }
+          </IconBtn>
         </div>
 
-        {/* Progress bar row */}
-        <div style={{ width: '100%', maxWidth: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Progress row */}
+        <div style={{ width: '100%', maxWidth: 560, display: 'flex', alignItems: 'center', gap: 10 }}>
           <span style={{
-            fontSize: '0.63rem', color: 'var(--muted-text)',
-            fontFamily: 'var(--font-display)', flexShrink: 0, width: 28, textAlign: 'right',
+            fontSize: '1rem', color: 'var(--muted-text)', fontFamily: 'var(--font-display)',
+            flexShrink: 0, width: 32, textAlign: 'right', letterSpacing: '0.02em',
           }}>
             {fmtTime(positionSeconds)}
           </span>
+
           <div
             ref={barRef}
             onClick={handleBarClick}
+            onMouseEnter={() => setHovering(true)}
+            onMouseLeave={() => setHovering(false)}
             style={{
-              flex: 1, height: 3, borderRadius: 2,
+              flex: 1, height: hovering ? 6 : 4, borderRadius: 4,
               background: 'rgba(255,255,255,0.07)',
               cursor: 'pointer', position: 'relative',
-              transition: 'height 0.15s',
+              transition: 'height 0.2s cubic-bezier(0.16,1,0.3,1)',
             }}
-            onMouseEnter={e => (e.currentTarget.style.height = '5px')}
-            onMouseLeave={e => (e.currentTarget.style.height = '3px')}
           >
+            {/* Filled */}
             <div style={{
-              height: '100%', borderRadius: 2,
+              height: '100%', borderRadius: 4,
               width: `${progress}%`,
-              background: 'var(--gold)',
-              transition: 'width 1s linear',
+              background: hovering
+                ? 'linear-gradient(90deg, var(--gold-dim), var(--gold))'
+                : 'var(--gold)',
+              transition: 'width 1s linear, background 0.2s',
               pointerEvents: 'none',
             }} />
+            {/* Thumb */}
+            {hovering && (
+              <div style={{
+                position: 'absolute', top: '50%',
+                left: `${progress}%`,
+                transform: 'translate(-50%, -50%)',
+                width: 12, height: 12, borderRadius: '50%',
+                background: 'var(--ivory)',
+                boxShadow: '0 0 6px rgba(232,184,75,0.5)',
+                pointerEvents: 'none',
+                transition: 'left 1s linear',
+              }} />
+            )}
           </div>
+
           <span style={{
-            fontSize: '0.63rem', color: 'var(--muted-text)',
-            fontFamily: 'var(--font-display)', flexShrink: 0, width: 28,
+            fontSize: '1rem', color: 'var(--muted-text)', fontFamily: 'var(--font-display)',
+            flexShrink: 0, width: 32, letterSpacing: '0.02em',
           }}>
             {fmtTime(duration)}
           </span>
         </div>
       </div>
 
-      {/* ── Right: waveBar + volume + queue link ──────────────────────────── */}
+      {/* ── Right: wave + volume + queue ─────────────────────────────────── */}
       <div style={{
-        width: 190, flexShrink: 0,
-        display: 'flex', alignItems: 'center', gap: 10,
+        width: 210, flexShrink: 0,
+        display: 'flex', alignItems: 'center', gap: 8,
         justifyContent: 'flex-end',
       }}>
-        {isPlaying && <WaveBar isPlaying={isPlaying} />}
+        <WaveBar isPlaying={isPlaying} />
 
-        <button
-          type="button"
-          onClick={() => setVolume(volume > 0 ? 0 : 0.8)}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer', padding: 4,
-            color: 'var(--muted-text)', display: 'flex',
-            transition: 'color 0.15s',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--ivory)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted-text)')}
-        >
+        <IconBtn onClick={() => setVolume(volume > 0 ? 0 : 0.8)} size={30}>
           {volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
-        </button>
+        </IconBtn>
 
-        <input
-          type="range"
-          min="0" max="1" step="0.02"
-          value={volume}
-          onChange={e => setVolume(parseFloat(e.target.value))}
-          style={{ width: 72, accentColor: 'var(--gold)', cursor: 'pointer' }}
-        />
+        <div style={{ position: 'relative', width: 76 }}>
+          <div style={{
+            position: 'absolute', top: '50%', left: 0, right: 0, height: 3,
+            background: 'rgba(255,255,255,0.08)', borderRadius: 2, transform: 'translateY(-50%)',
+            pointerEvents: 'none',
+          }}>
+            <div style={{
+              height: '100%', width: `${volume * 100}%`,
+              background: 'var(--gold)', borderRadius: 2,
+            }} />
+          </div>
+          <input
+            type="range" min="0" max="1" step="0.02" value={volume}
+            onChange={e => setVolume(parseFloat(e.target.value))}
+            style={{ width: '100%', opacity: 0, cursor: 'pointer', position: 'relative', zIndex: 1, height: 16 }}
+          />
+        </div>
 
         <Link
           href={`/${locale}/queue`}
           title="View queue"
-          style={{
-            color: 'var(--muted-text)', display: 'flex', padding: 4,
-            transition: 'color 0.15s',
-          }}
-          onMouseEnter={e => ((e.currentTarget as HTMLElement).style.color = 'var(--gold)')}
-          onMouseLeave={e => ((e.currentTarget as HTMLElement).style.color = 'var(--muted-text)')}
+          style={{ color: 'var(--muted-text)', display: 'flex', padding: 4, borderRadius: 6, transition: 'color 0.15s, background 0.15s' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--gold)'; (e.currentTarget as HTMLElement).style.background = 'rgba(232,184,75,0.08)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--muted-text)'; (e.currentTarget as HTMLElement).style.background = 'none'; }}
         >
-          <ListMusic size={15} />
+          <ListMusic size={16} />
         </Link>
       </div>
     </footer>

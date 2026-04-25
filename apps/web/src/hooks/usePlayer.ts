@@ -21,7 +21,13 @@ function getAudio(): HTMLAudioElement | null {
       usePlayerStore.getState().setPosition(Math.floor(_audio!.currentTime));
     });
     _audio.addEventListener('ended', () => {
-      usePlayerStore.getState().setPlaying(false);
+      const { repeatMode } = usePlayerStore.getState();
+      if (repeatMode === 'one' || repeatMode === 'all') {
+        _audio!.currentTime = 0;
+        _audio!.play().catch(() => usePlayerStore.getState().setPlaying(false));
+      } else {
+        usePlayerStore.getState().setPlaying(false);
+      }
     });
     _audio.addEventListener('error', () => {
       usePlayerStore.getState().setPlaying(false);

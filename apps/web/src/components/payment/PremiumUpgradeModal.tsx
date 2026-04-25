@@ -33,7 +33,7 @@ export function PremiumUpgradeModal({ open, onOpenChange }: PremiumUpgradeModalP
       } else {
         const res = await paymentsApi.initiateMomo(selectedPlan);
         const data = res.data?.data ?? res.data;
-        window.location.href = data.payUrl;
+        window.location.href = data.paymentUrl;
       }
     } catch {
       setError('Failed to connect to payment gateway. Please try again.');
@@ -56,18 +56,24 @@ export function PremiumUpgradeModal({ open, onOpenChange }: PremiumUpgradeModalP
           background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)',
         }} />
         <Dialog.Content
-          className="anim-scale-reveal"
           style={{
             position: 'fixed', top: '50%', left: '50%', zIndex: 201,
             transform: 'translate(-50%, -50%)',
             width: 'min(640px, 94vw)',
-            background: 'var(--surface)',
-            border: '1px solid rgba(232,184,75,0.15)',
-            borderRadius: 14,
-            boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
-            maxHeight: '88vh', overflowY: 'auto',
+            outline: 'none',
           }}
         >
+          {/* Inner wrapper carries the scale animation so it doesn't override translate(-50%,-50%) */}
+          <div
+            className="anim-scale-reveal"
+            style={{
+              background: 'var(--surface)',
+              border: '1px solid rgba(232,184,75,0.15)',
+              borderRadius: 14,
+              boxShadow: '0 32px 80px rgba(0,0,0,0.7)',
+              maxHeight: '88vh', overflowY: 'auto',
+            }}
+          >
           {/* Header */}
           <div style={{ padding: '26px 26px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -147,6 +153,7 @@ export function PremiumUpgradeModal({ open, onOpenChange }: PremiumUpgradeModalP
             >
               {loading ? 'Redirecting…' : 'Continue to Payment →'}
             </button>
+          </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>

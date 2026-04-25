@@ -6,12 +6,12 @@ import { Song } from '../songs/entities/song.entity';
 import { ArtistProfile } from '../auth/entities/artist-profile.entity';
 import { Role, SongStatus } from '../../common/enums';
 
-interface DailyPlay {
+export interface DailyPlay {
   date: string;
   count: number;
 }
 
-interface TopSong {
+export interface TopSong {
   songId: string;
   title: string;
   coverArtUrl: string | null;

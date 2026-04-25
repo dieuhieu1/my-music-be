@@ -46,7 +46,7 @@ export default function PaymentPage() {
       } else {
         const res  = await paymentsApi.initiateMomo(selectedPlan);
         const data = res.data?.data ?? res.data;
-        window.location.href = data.payUrl;
+        window.location.href = data.paymentUrl;
       }
     } catch {
       setApiError('Could not connect to the payment gateway. Please try again.');

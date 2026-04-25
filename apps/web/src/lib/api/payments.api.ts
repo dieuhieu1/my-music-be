@@ -4,19 +4,11 @@ import type { PremiumType } from '@mymusic/types';
 export const paymentsApi = {
   // J1: Initiate VNPay — GET, returns { paymentUrl }
   initiateVnpay: (premiumType: PremiumType) =>
-    apiClient.get('/payment/vnpay', { params: { premiumType } }),
+    apiClient.get('/payment/vn-pay', { params: { premiumType } }),
 
-  // J1: Initiate MoMo — POST, returns { payUrl }
+  // J1: Initiate MoMo — POST, returns { paymentUrl }
   initiateMomo: (premiumType: PremiumType) =>
     apiClient.post('/payment/momo', { premiumType }),
-
-  // J2: Verify VNPay callback — POST full query-param object from return URL
-  verifyVnpay: (params: Record<string, string>) =>
-    apiClient.post('/payment/vnpay/callback', params),
-
-  // J3: Verify MoMo callback — POST full query-param object from return URL
-  verifyMomo: (params: Record<string, string>) =>
-    apiClient.post('/payment/momo/callback', params),
 
   // L6: Admin list all payment records
   getPaymentRecords: (params?: {

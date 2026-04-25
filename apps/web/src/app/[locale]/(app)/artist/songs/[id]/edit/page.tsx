@@ -4,11 +4,15 @@ import { useEffect, useRef, useState, DragEvent } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft, Check, Loader2, Music2, Cpu, AlertTriangle, Image, Trash2, CheckCircle2
+  ArrowLeft, Check, Loader2, Music2, Cpu, AlertTriangle, Image, Trash2, CheckCircle2,
+  Play, Pause,
 } from 'lucide-react';
 import { songsApi, type Song } from '@/lib/api/songs.api';
 import { albumsApi, type Album } from '@/lib/api/albums.api';
 import { genresApi, type Genre } from '@/lib/api/genres.api';
+import { usePlayer } from '@/hooks/usePlayer';
+import { usePlayerStore } from '@/store/usePlayerStore';
+import { useAuthStore } from '@/store/useAuthStore';
 
 const CAMELOT_CODES = [
   '1A','2A','3A','4A','5A','6A','7A','8A','9A','10A','11A','12A',
@@ -148,6 +152,10 @@ export default function EditSongPage() {
   const { locale, id } = useParams<{ locale: string; id: string }>();
   const router = useRouter();
 
+  const { playSong, togglePlay } = usePlayer();
+  const { currentSong, isPlaying } = usePlayerStore();
+  const { user } = useAuthStore();
+
   const [song, setSong]           = useState<Song | null>(null);
   const [genres, setGenres]       = useState<Genre[]>([]);
   const [albums, setAlbums]       = useState<Album[]>([]);
@@ -157,6 +165,7 @@ export default function EditSongPage() {
   const [error, setError]         = useState('');
   const [delConfirm, setDelConfirm] = useState(false);
   const [deleting, setDeleting]   = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   // Editable fields
   const [title, setTitle]             = useState('');
@@ -189,6 +198,27 @@ export default function EditSongPage() {
       setExtracting(s.bpm === null);
     }).catch(() => setError('Failed to load song.')).finally(() => setLoading(false));
   }, [id]);
+
+  const isThisSongPlaying = currentSong?.id === id && isPlaying;
+  const isThisSongLoaded  = currentSong?.id === id;
+
+  const handlePreview = async () => {
+    if (!song) return;
+    if (isThisSongLoaded) { togglePlay(); return; }
+    setPreviewLoading(true);
+    try {
+      await playSong({
+        id: song.id,
+        title: song.title,
+        artistName: user?.name ?? '',
+        coverArtUrl: song.coverArtUrl,
+        fileUrl: '',
+        durationSeconds: song.duration ?? 0,
+      });
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   const handleExtractionComplete = (updatedSong: Song) => {
     setSong(updatedSong);
@@ -280,6 +310,29 @@ export default function EditSongPage() {
             }}>
               {STATUS_LABEL[song.status] ?? song.status}
             </span>
+          )}
+          {song && !extracting && (
+            <button
+              type="button"
+              onClick={handlePreview}
+              disabled={previewLoading}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '7px 16px', borderRadius: 20, border: 'none',
+                background: isThisSongPlaying ? 'rgba(232,184,75,0.2)' : 'rgba(232,184,75,0.1)',
+                color: 'var(--gold)', fontSize: '0.75rem', fontFamily: 'var(--font-body)',
+                fontWeight: 500, cursor: previewLoading ? 'wait' : 'pointer',
+                letterSpacing: '0.04em', transition: 'background 0.15s',
+              }}
+            >
+              {previewLoading
+                ? <div className="vinyl-spin" style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(232,184,75,0.3)', borderTopColor: 'var(--gold)' }} />
+                : isThisSongPlaying
+                  ? <Pause size={13} fill="currentColor" />
+                  : <Play size={13} fill="currentColor" style={{ marginLeft: 1 }} />
+              }
+              {isThisSongPlaying ? 'Pause' : 'Preview'}
+            </button>
           )}
         </div>
       </div>

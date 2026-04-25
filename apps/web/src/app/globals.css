@@ -96,6 +96,11 @@
   50%       { transform: scaleY(1); }
 }
 
+@keyframes shimmerLine {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
 @keyframes beamSweep {
   0%   { opacity: 0; transform: rotate(-30deg) translateX(-60px); }
   30%  { opacity: 1; }

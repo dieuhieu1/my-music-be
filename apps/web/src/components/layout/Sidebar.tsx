@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Role } from '@mymusic/types';
+
 import {
   Compass,
   ListMusic,
@@ -15,9 +16,6 @@ import {
   Upload,
   BarChart2,
   Radio,
-  Shield,
-  UserCircle2,
-  LogOut,
   Disc,
   Tags,
   ClipboardList,
@@ -25,11 +23,6 @@ import {
   ListOrdered,
   Download,
 } from 'lucide-react';
-import { PremiumBadge } from '@/components/layout/PremiumBadge';
-import { authApi } from '@/lib/api/auth.api';
-import { usePlayerStore } from '@/store/usePlayerStore';
-import { useQueueStore } from '@/store/useQueueStore';
-import { useRouter } from 'next/navigation';
 
 // ── Nav item shape ─────────────────────────────────────────────────────────
 interface NavItem {
@@ -50,7 +43,7 @@ const listenerItems: NavItem[] = [
 ];
 
 const artistItems: NavItem[] = [
-  { href: '/artist/profile',   label: 'My Profile',    Icon: Mic2      },
+  { href: '/artist/profile',   label: 'Artist Profile', Icon: Mic2      },
   { href: '/artist/songs',     label: 'My Songs',      Icon: Library   },
   { href: '/artist/upload',    label: 'Upload',        Icon: Upload    },
   { href: '/artist/albums',    label: 'My Albums',     Icon: Disc      },
@@ -127,8 +120,7 @@ function SectionHeader({ label }: { label: string }) {
 export default function Sidebar() {
   const { locale } = useParams<{ locale: string }>();
   const pathname = usePathname();
-  const router = useRouter();
-  const { user, hasRole, clearUser } = useAuthStore();
+  const { hasRole } = useAuthStore();
   const isArtist = hasRole(Role.ARTIST);
   const isAdmin  = hasRole(Role.ADMIN);
 
@@ -136,26 +128,6 @@ export default function Sidebar() {
     exact
       ? pathname === `/${locale}${href}`
       : pathname === `/${locale}${href}` || pathname.startsWith(`/${locale}${href}/`);
-
-  const handleLogout = async () => {
-    // Best-effort: tell the server to invalidate the session + clear httpOnly cookies
-    try { await authApi.logout(); } catch {}
-
-    // Wipe all client-side state
-    clearUser();
-    usePlayerStore.getState().clearPlayer();
-    useQueueStore.getState().clearQueue();
-
-    // Hard navigation instead of router.push so that:
-    // 1. The middleware re-evaluates the cookie state from scratch
-    // 2. All React module-level singletons (Audio element, Zustand) are reset
-    // 3. The auth-already-logged-in middleware guard never sees a stale cookie
-    window.location.href = `/${locale}/login`;
-  };
-
-  const initials = user?.name
-    ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
-    : '?';
 
   return (
     <aside
@@ -263,99 +235,6 @@ export default function Sidebar() {
         )}
       </nav>
 
-      {/* ── User mini-profile ──────────────────────────────────────────── */}
-      {user && (
-        <>
-          <div style={{ height: 1, background: '#141414', flexShrink: 0 }} />
-          <div style={{ padding: '10px 12px', flexShrink: 0 }}>
-            <Link
-              href={`/${locale}/profile`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 9,
-                padding: '8px',
-                borderRadius: 6,
-                textDecoration: 'none',
-                transition: 'background 0.15s',
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.04)')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.background = 'transparent')}
-            >
-              {/* Avatar */}
-              {user.avatarUrl ? (
-                <img
-                  src={user.avatarUrl}
-                  alt={user.name}
-                  style={{
-                    width: 30, height: 30, borderRadius: '50%',
-                    objectFit: 'cover', flexShrink: 0,
-                    border: '1px solid rgba(232,184,75,0.25)',
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: 30, height: 30, borderRadius: '50%',
-                  background: 'rgba(232,184,75,0.12)',
-                  border: '1px solid rgba(232,184,75,0.2)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  fontSize: '0.65rem',
-                  fontWeight: 600,
-                  color: 'var(--gold)',
-                  letterSpacing: '0.05em',
-                }}>
-                  {initials}
-                </div>
-              )}
-
-              {/* Name */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{
-                  fontSize: '0.78rem',
-                  fontWeight: 500,
-                  color: 'var(--ivory)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  lineHeight: 1.3,
-                }}>
-                  {user.name}
-                </p>
-                <div style={{ marginTop: 2 }}>
-                  <PremiumBadge variant="pill" />
-                  {!user.premiumStatus && (
-                    <span style={{ fontSize: '0.63rem', color: 'var(--muted-text)' }}>
-                      Listener
-                    </span>
-                  )}
-                </div>
-              </div>
-              <UserCircle2 size={13} style={{ color: 'var(--muted-text)', flexShrink: 0, opacity: 0.5 }} />
-            </Link>
-
-            {/* Logout */}
-            <button
-              type="button"
-              onClick={handleLogout}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', padding: '6px 8px',
-                background: 'transparent', border: 'none',
-                color: 'var(--muted-text)', fontSize: '0.75rem',
-                fontFamily: 'var(--font-body)',
-                cursor: 'pointer', borderRadius: 4,
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={(e) => ((e.currentTarget as HTMLElement).style.color = '#e07070')}
-              onMouseLeave={(e) => ((e.currentTarget as HTMLElement).style.color = 'var(--muted-text)')}
-            >
-              <LogOut size={12} style={{ flexShrink: 0 }} />
-              Sign out
-            </button>
-          </div>
-        </>
-      )}
     </aside>
   );
 }

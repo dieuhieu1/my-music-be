@@ -7,6 +7,7 @@ import { UserGenrePreference } from './entities/user-genre-preference.entity';
 import { StorageService } from '../storage/storage.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { OnboardingDto } from './dto/onboarding.dto';
+import { Role } from '../../common/enums';
 
 @Injectable()
 export class UsersService {
@@ -92,8 +93,8 @@ export class UsersService {
       roles: user.roles,
       followerCount: user.followerCount,
       followingCount: user.followingCount,
-      isPremium: user.isPremium,
-      premiumExpiresAt: user.premiumExpiresAt,
+      premiumStatus:    user.roles.includes(Role.PREMIUM),
+      premiumExpiryDate: user.premiumExpiresAt ?? null,
       onboardingCompleted: user.onboardingCompleted ?? false,
       createdAt: user.createdAt,
     };

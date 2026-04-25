@@ -16,7 +16,7 @@ export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
   private readonly client: S3Client;
   private readonly region: string;
-  private readonly buckets: { audio: string; audioEnc: string; images: string };
+  private readonly buckets: { audio: string; images: string };
 
   constructor(private readonly config: ConfigService) {
     this.region = config.get<string>('storage.region') ?? 'ap-southeast-1';
@@ -76,7 +76,7 @@ export class StorageService implements OnModuleInit {
     await this.client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
   }
 
-  getBuckets(): { audio: string; audioEnc: string; images: string } {
+  getBuckets(): { audio: string; images: string } {
     return this.buckets;
   }
 }
