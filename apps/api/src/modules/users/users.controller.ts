@@ -20,6 +20,7 @@ import { memoryStorage } from 'multer';
 import { UsersService } from './users.service';
 import { FollowService } from '../follow/follow.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { OnboardingDto } from './dto/onboarding.dto';
 import { PaginationDto } from '../../common/dto/pagination.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -61,6 +62,16 @@ export class UsersController {
     @UploadedFile() file?: Express.Multer.File,
   ) {
     return this.usersService.updateMe(user.id, dto, file);
+  }
+
+  // ── POST /users/me/onboarding (BL-35A) ───────────────────────────────────
+
+  @Post('me/onboarding')
+  completeOnboarding(
+    @CurrentUser('id') userId: string,
+    @Body() dto: OnboardingDto,
+  ) {
+    return this.usersService.completeOnboarding(userId, dto);
   }
 
   // ── GET /users/:id (public) ────────────────────────────────────────────────

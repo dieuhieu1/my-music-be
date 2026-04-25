@@ -34,8 +34,7 @@ Sub-apps have their own `CLAUDE.md`:
 | Python DSP | 5000 | `GET /health`, `POST /extract` |
 | PostgreSQL | 5432 | TypeORM |
 | Redis | 6379 | BullMQ + cache + JWT denylist |
-| MinIO | 9000/9001 | S3 buckets: `audio`, `audio-enc`, `images` |
-| MailHog | 1025/8025 | Dev SMTP trap |
+| AWS S3 | — | 3 buckets: `mymusic-audio` (private), `mymusic-audio-enc` (private), `mymusic-images` (public-read) |
 
 ---
 
@@ -125,17 +124,22 @@ SCHEDULED → (cron at dropAt) → LIVE
 ```
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://localhost:6379
-MINIO_ENDPOINT=localhost
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
+AWS_REGION=ap-southeast-1
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_S3_BUCKET_AUDIO=mymusic-audio
+AWS_S3_BUCKET_AUDIO_ENC=mymusic-audio-enc
+AWS_S3_BUCKET_IMAGES=mymusic-images
+AWS_S3_PRESIGN_EXPIRES_SEC=3600
 JWT_SECRET=...
 JWT_REFRESH_SECRET=...
 DSP_URL=http://dsp:5000
 ANTHROPIC_API_KEY=sk-ant-...
 VNPAY_HASH_SECRET=...
 MOMO_SECRET_KEY=...
-SMTP_HOST=localhost
-SMTP_PORT=1025
+GMAIL_USER=your_email@gmail.com
+GMAIL_APP_PASSWORD=your_16char_app_password
+MAIL_FROM=your_email@gmail.com
 ```
 
 ---

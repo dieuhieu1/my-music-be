@@ -32,7 +32,7 @@ const DOWNLOAD_LIMITS: Partial<Record<string, number>> = {
 };
 
 const LICENSE_JWT_TTL_DAYS = 30;
-const ENC_BUCKET = 'audio-enc';
+// Resolved from StorageService at call time via getBuckets().audioEnc
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ export class DownloadsService {
     // 5-minute presigned URL for the .enc file
     const encFileName = `${songId}.enc`;
     const downloadUrl = await this.storageService.presignedGetObject(
-      ENC_BUCKET,
+      this.storageService.getBuckets().audioEnc,
       encFileName,
       5 * 60,
     );

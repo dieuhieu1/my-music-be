@@ -137,6 +137,7 @@ export class PlaybackService {
       userId,
       songId: dto.songId,
       playedAt: dto.playedAt ? new Date(dto.playedAt) : new Date(),
+      skipped: dto.skipped ?? false,
     });
     await this.playHistory.save(entry);
     return { recorded: true };

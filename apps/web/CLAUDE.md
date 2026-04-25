@@ -98,7 +98,8 @@ src/
 | `/[locale]/playlists/[id]/edit` | `(app)/playlists/[id]/edit/page.tsx` | Edit playlist |
 | `/[locale]/playlists/liked` | `(app)/playlists/liked/page.tsx` | Liked songs playlist |
 | `/[locale]/playlists/saved` | `(app)/playlists/saved/page.tsx` | Saved playlists |
-| `/[locale]/playlists/mood` | `(app)/playlists/mood/page.tsx` | Mood-based auto-playlist |
+| `/[locale]/playlists/mood` | `(app)/playlists/mood/page.tsx` | **Phase 10** — Mood selector + mood-filtered song list (G7) |
+| `/[locale]/onboarding` | `(app)/onboarding/page.tsx` | **Phase 10** — Genre preference onboarding (A8); own layout overrides app shell |
 | `/[locale]/downloads` | `(app)/downloads/page.tsx` | Premium downloads list |
 | `/[locale]/payment` | `(app)/payment/page.tsx` | Premium upgrade plan selector |
 | `/[locale]/payment/vnpay` | `(app)/payment/vnpay/page.tsx` | VNPay payment result page |
@@ -146,7 +147,7 @@ All modules use `apiClient` from `axios.ts` with `withCredentials: true`. Respon
 | `admin.api.ts` | `getSongsQueue`, `approveSong`, `rejectSong`, `requireReupload`, `takedownSong`, `restoreSong`, `getUsers`, `updateUserRoles`, `getPayments`, `getAuditLog`, `getReports` |
 | `drops.api.ts` | `getDrops(page,size)` → `GET /drops`; `cancelDrop(songId)` → `DELETE /songs/:id/drop`; `rescheduleDrop(songId,dropAt)` → `PATCH /songs/:id/drop`; `subscribeNotify(songId)` → `POST /songs/:id/notify`; `unsubscribeNotify(songId)` → `DELETE /songs/:id/notify` |
 | `notifications.api.ts` | `getNotifications(page,limit)` → `GET /notifications`; `getUnreadCount()` → `GET /notifications/unread-count`; `markAsRead(id)` → `PATCH /notifications/:id/read`; `markAllAsRead()` → `PATCH /notifications/read-all` |
-| `recommendations.api.ts` | `getRecommendations`, `getMoodPlaylist` |
+| `recommendations.api.ts` | `getRecommendations(params, ctx)` → `SongRecommendationDto[]`; `getMoodRecommendations(params, ctx)` → `{ mood, inferred, songs }`. Context headers: `X-Device-Type`, `X-Local-Hour`, `X-Location-Context`. |
 | `reports.api.ts` | `reportContent`, `getReports`, `resolveReport` |
 
 ---
@@ -336,7 +337,9 @@ hsl(var(--border))       /* Border color */
 - Shell layout: `src/app/[locale]/(app)/layout.tsx` renders Sidebar + TopBar + PlayerBar; body has `pb-24` for PlayerBar clearance
 
 ### Data Fetching
-- Pattern: `useEffect` + local `useState(loading/data)` — **no React Query**
+- Pattern: `useEffect` + local `useState(loading/data)` for Phases 1–9
+- **Phase 10+ uses React Query (`@tanstack/react-query` v5)** — `staleTime: 5*60*1000`, no `refetchInterval`
+- Query keys: `['recommendations', timeRange, size]`, `['recommendations','mood',mood]`, `['genres']` (staleTime 1h)
 - Response unwrap: `const data = res.data?.data ?? res.data`
 - Optimistic updates: save prev state → update store/state → call API → rollback on catch
 
@@ -387,6 +390,12 @@ hsl(var(--border))       /* Border color */
 - **TopBar NotificationBell**: only rendered when `user` is authenticated
 - **Upload page dropAt**: scheduled drop date handled inline as `datetime-local` in Advanced Options — no separate modal needed
 - **`hasRescheduled` in RescheduleDropModal**: shows final-reschedule warning; backend enforces once-only; `requiresReApproval: true` in response means song returns to pending review
+- **Queue add pattern**: always use `useQueue().addToQueue(songId)` (API-backed) — never `useQueueStore().addToQueue(item)` directly from pages/components
+- **Recommendations context headers**: `useRecommendations` and `useMoodRecs` auto-inject `X-Device-Type` (based on `window.innerWidth`) and `X-Local-Hour` (`new Date().getHours()`) — do not pass manually from components
+- **Onboarding route**: `/[locale]/(app)/onboarding` — has its own `layout.tsx` full-screen overlay (z-index 200) to bypass app shell; protected by JWT (middleware) but visually shell-free
+- **`SongRecommendationDto` → `Song` adapter**: defined inline in each consumer (G7 `page.tsx`, `RecommendationSection`) — maps `totalPlays→listenCount`, fills missing fields with safe defaults
+- **React Query provider**: `ReactQueryProvider` client component wraps locale layout; `defaultOptions.staleTime = 5min`
+- **Phase 10 gap**: AI Chat page H5 not yet started
 
 ---
 
@@ -404,7 +413,7 @@ hsl(var(--border))       /* Border color */
 | 7 | Payments & Premium Downloads | ✅ |
 | 8 | Drops & Notifications | ✅ |
 | 9 | Reports, Analytics & Admin Tools | 🔲 |
-| 10 | Recommendations, Mood Engine & AI Chat | 🔲 |
+| 10 | Recommendations, Mood Engine & AI Chat | ✅ (E1 + G7; AI Chat H5 not yet started) |
 
 ---
 
@@ -443,3 +452,35 @@ Read this file first. Only open a doc when it answers something this CLAUDE.md c
 | `../../CLAUDE.md` | API envelope, phase status, BullMQ queues, song status machine |
 
 **Rule**: open one doc, extract what you need, close it. Never read docs upfront before you have a specific question.
+
+---
+
+## Phase 10 FE Additions
+
+### Infrastructure
+- `@tanstack/react-query` v5 installed
+- `ReactQueryProvider` wraps `[locale]/layout.tsx` (client component using `useState`)
+- Default `staleTime`: 5 minutes; retry: 1
+
+### Store update
+- `useAuthStore.AuthUser` now includes `onboardingCompleted: boolean`
+- Populated from `GET /users/me` response — **BE must return this field** (`users.service.ts → buildUserResponse`)
+
+### New files
+| File | Purpose |
+|------|---------|
+| `components/providers/ReactQueryProvider.tsx` | `QueryClientProvider` wrapper |
+| `components/onboarding/GenreChip.tsx` | Selectable genre pill — gold border/bg when active, disabled at max-10 |
+| `app/[locale]/(app)/onboarding/layout.tsx` | Fixed full-screen overlay (`z-index: 200`) bypasses app shell |
+| `app/[locale]/(app)/onboarding/page.tsx` | A8 — genre selection form with `useMutation` submit |
+
+### Hooks pattern (Phase 10)
+All recommendation hooks use `useQuery` (React Query v5) — not `useEffect + useState`.
+Query key patterns:
+- `['recommendations', timeRange, size]`
+- `['recommendations', 'mood', mood, size]`
+- `['genres']` (staleTime 1 hour)
+
+### Intentional omissions
+- `X-Location-Context` header: TODO V2 (requires explicit user action)
+- AI Chat page H5: not started

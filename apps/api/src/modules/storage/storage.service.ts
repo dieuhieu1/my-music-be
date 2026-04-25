@@ -1,85 +1,82 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Readable } from 'stream';
-import * as Minio from 'minio';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  HeadBucketCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
-  private readonly client: Minio.Client;       // internal — used for uploads/deletes
-  private readonly presignClient: Minio.Client; // public-facing — used for presigned URLs
-  private readonly buckets: { audio: string; images: string };
+  private readonly client: S3Client;
+  private readonly region: string;
+  private readonly buckets: { audio: string; audioEnc: string; images: string };
 
   constructor(private readonly config: ConfigService) {
-    const endPoint = config.get<string>('minio.endPoint');
-    const port     = config.get<number>('minio.port');
-    const useSSL   = config.get<boolean>('minio.useSSL');
-    const accessKey = config.get<string>('minio.accessKey');
-    const secretKey = config.get<string>('minio.secretKey');
+    this.region = config.get<string>('storage.region') ?? 'ap-southeast-1';
+    this.buckets = config.get('storage.buckets');
 
-    this.client = new Minio.Client({ endPoint, port, useSSL, accessKey, secretKey });
-
-    // Build a second client that signs URLs with the browser-accessible hostname.
-    // Presigned URL signatures include the host — replacing it after signing breaks
-    // the signature (SignatureDoesNotMatch). We must sign with the public host.
-    const publicUrl = config.get<string | null>('minio.publicUrl');
-    if (publicUrl) {
-      const parsed = new URL(publicUrl);
-      this.presignClient = new Minio.Client({
-        endPoint: parsed.hostname,
-        port: parsed.port ? parseInt(parsed.port, 10) : (parsed.protocol === 'https:' ? 443 : 80),
-        useSSL: parsed.protocol === 'https:',
-        accessKey,
-        secretKey,
-      });
-    } else {
-      this.presignClient = this.client;
-    }
-
-    this.buckets = config.get('minio.buckets');
+    this.client = new S3Client({
+      region: this.region,
+      credentials: {
+        accessKeyId:     config.get<string>('storage.accessKeyId') ?? '',
+        secretAccessKey: config.get<string>('storage.secretAccessKey') ?? '',
+      },
+    });
   }
 
   async onModuleInit(): Promise<void> {
-    await this.ensureBucket(this.buckets.audio);
-    await this.ensureBucket(this.buckets.images);
-  }
-
-  private async ensureBucket(name: string): Promise<void> {
-    const exists = await this.client.bucketExists(name);
-    if (!exists) {
-      await this.client.makeBucket(name);
-      this.logger.log(`Created MinIO bucket: "${name}"`);
+    for (const bucket of Object.values(this.buckets)) {
+      try {
+        await this.client.send(new HeadBucketCommand({ Bucket: bucket }));
+        this.logger.log(`S3 bucket verified: "${bucket}"`);
+      } catch {
+        this.logger.error(`S3 bucket "${bucket}" is missing or not accessible — create it before starting`);
+      }
     }
   }
 
-  async upload(bucket: string, objectName: string, buffer: Buffer, mimeType: string): Promise<string> {
-    await this.client.putObject(bucket, objectName, buffer, buffer.length, { 'Content-Type': mimeType });
-    return objectName;
+  async upload(bucket: string, key: string, buffer: Buffer, mimeType: string): Promise<string> {
+    await this.client.send(
+      new PutObjectCommand({ Bucket: bucket, Key: key, Body: buffer, ContentType: mimeType }),
+    );
+    return key;
   }
 
-  async uploadStream(bucket: string, objectName: string, stream: Readable, size: number, mimeType: string): Promise<string> {
-    await this.client.putObject(bucket, objectName, stream, size, { 'Content-Type': mimeType });
-    return objectName;
+  // Multipart upload for streams (large audio files).
+  async uploadStream(bucket: string, key: string, stream: Readable, _size: number, mimeType: string): Promise<string> {
+    const upload = new Upload({
+      client: this.client,
+      params: { Bucket: bucket, Key: key, Body: stream, ContentType: mimeType },
+    });
+    await upload.done();
+    return key;
   }
 
-  // Direct public URL for objects in publicly readable buckets (cover art, avatars).
-  // Falls back to a presigned URL if no public URL is configured.
-  getPublicUrl(bucket: string, objectName: string): string {
-    const publicUrl = this.config.get<string | null>('minio.publicUrl');
-    const base = publicUrl ? publicUrl.replace(/\/$/, '') : `http://${this.config.get('minio.endPoint')}:${this.config.get('minio.port')}`;
-    return `${base}/${bucket}/${objectName}`;
+  // Direct public URL — requires the images bucket to have a public-read bucket policy.
+  getPublicUrl(bucket: string, key: string): string {
+    return `https://${bucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 
-  // Presigned URL — use only for private buckets (audio files).
-  async presignedGetObject(bucket: string, objectName: string, expirySeconds = 900): Promise<string> {
-    return this.client.presignedGetObject(bucket, objectName, expirySeconds);
+  async presignedGetObject(bucket: string, key: string, expirySeconds = 900): Promise<string> {
+    return getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: bucket, Key: key }),
+      { expiresIn: expirySeconds },
+    );
   }
 
-  async deleteObject(bucket: string, objectName: string): Promise<void> {
-    await this.client.removeObject(bucket, objectName);
+  async deleteObject(bucket: string, key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
   }
 
-  getBuckets(): { audio: string; images: string } {
+  getBuckets(): { audio: string; audioEnc: string; images: string } {
     return this.buckets;
   }
 }

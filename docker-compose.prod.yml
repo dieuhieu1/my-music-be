@@ -2,11 +2,6 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
 services:
-  # Remove MailHog — use real SMTP via env vars
-  mailhog:
-    profiles:
-      - donotstart
-
   api:
     build:
       target: prod
@@ -20,9 +15,6 @@ services:
     restart: always
 
   redis:
-    restart: always
-
-  minio:
     restart: always
 
   dsp:

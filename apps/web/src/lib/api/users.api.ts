@@ -39,6 +39,9 @@ export const usersApi = {
     return apiClient.patch('/users/me', dto);
   },
 
+  completeOnboarding: (dto: { genreIds: string[]; skipped: boolean }) =>
+    apiClient.post('/users/me/onboarding', dto),
+
   getUser: (userId: string) =>
     apiClient.get(`/users/${userId}`),
 

@@ -1,15 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { User } from '../auth/entities/user.entity';
+import { UserGenrePreference } from './entities/user-genre-preference.entity';
 import { StorageService } from '../storage/storage.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { OnboardingDto } from './dto/onboarding.dto';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(UserGenrePreference) private readonly genrePrefs: Repository<UserGenrePreference>,
     private readonly storage: StorageService,
   ) {}
 
@@ -53,6 +56,30 @@ export class UsersService {
     return this.buildUserResponse(saved);
   }
 
+  // ── POST /users/me/onboarding (BL-35A cold-start seed) ───────────────────
+
+  async completeOnboarding(userId: string, dto: OnboardingDto) {
+    const user = await this.users.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (!dto.skipped) {
+      if (!dto.genreIds || dto.genreIds.length === 0) {
+        throw new BadRequestException('At least one genre is required');
+      }
+      // Upsert genre preferences — delete old ones and re-insert so the
+      // user can call this endpoint again to update their picks.
+      await this.genrePrefs.delete({ userId });
+      const prefs = dto.genreIds.slice(0, 10).map((genreId) =>
+        this.genrePrefs.create({ userId, genreId }),
+      );
+      await this.genrePrefs.save(prefs);
+    }
+
+    user.onboardingCompleted = true;
+    const saved = await this.users.save(user);
+    return this.buildUserResponse(saved);
+  }
+
   // ── Response builders ─────────────────────────────────────────────────────
 
   // Full profile — returned to the authenticated user only
@@ -67,6 +94,7 @@ export class UsersService {
       followingCount: user.followingCount,
       isPremium: user.isPremium,
       premiumExpiresAt: user.premiumExpiresAt,
+      onboardingCompleted: user.onboardingCompleted ?? false,
       createdAt: user.createdAt,
     };
   }

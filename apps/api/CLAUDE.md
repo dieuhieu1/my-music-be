@@ -14,9 +14,9 @@ API: port 3001, global prefix `/api/v1`. Entry: `src/main.ts`.
 | ORM | TypeORM 0.3 | `autoLoadEntities: true`; dev: `synchronize: true`; prod: migrations only |
 | DB | PostgreSQL 16 | `src/config/database.config.ts` |
 | Queue / Cache | BullMQ + Redis 7 | `src/modules/queue/queue.module.ts` — `@Global()` |
-| Storage | MinIO S3 | buckets: `audio`, `audio-enc`, `images` |
+| Storage | AWS S3 (`@aws-sdk/client-s3` v3) | buckets: `mymusic-audio` (private), `mymusic-audio-enc` (private), `mymusic-images` (public-read); config: `src/config/storage.config.ts` |
 | Auth | Passport JWT | httpOnly cookies: `access_token` 15 min, `refresh_token` 30 days |
-| Email | Nodemailer | inline HTML templates only — no `.hbs` files |
+| Email | Nodemailer + Gmail SMTP | App Password auth; transport: `smtp.gmail.com:587` STARTTLS; config: `src/config/mail.config.ts` |
 | DSP sidecar | Python FastAPI | `DSP_URL` env, `/extract` endpoint |
 | Cron | `@nestjs/schedule` | `ScheduleModule.forRoot()` in AppModule |
 | Migrations | TypeORM CLI | `src/database/data-source.ts`; folder: `src/database/migrations/` |
@@ -129,6 +129,11 @@ Paginated lists (standard shape for all list endpoints):
 - **song energy field**: never expose in API responses; internal DSP value only
 - **encrypted file**: `song.encryptedFileUrl` is a MinIO object path; decrypt AES key from `song_encryption_keys` before use
 - **DropNotificationWorker location**: `DropsModule.providers` — NOT in `QueueModule`; it depends on DropsModule entities
+- **recommendations query count**: 7 queries per general-rec compute, zero loops — play_history (1), played-song metadata (1), liked-song IDs (2 — playlist + playlist_songs), candidate songs+artist JOIN (1), genre batch (1). N+1 enforced at query layer, not application logic.
+- **song.energy in recommendations**: stripped inside `toDto()` in `RecommendationsService` — never reaches any `SongRecommendationDto` instance or any API response
+- **recommendations size param**: values > 50 silently clamped to 50; no 422 thrown; `timeRange` values outside `7d`|`30d` → 422
+- **UNIQUE(userId, mood) null-safety**: handled via `findOne` + `update/save` (not TypeORM `upsert`) — PostgreSQL standard `UNIQUE` treats each NULL as a distinct value; app-layer guard prevents duplicate general-rec rows
+- **RecordPlayDto.skipped**: optional boolean, defaults `false` — backwards-compatible with all Phase 5 clients; FE must send `skipped: true` on pre-30s skip for BL-35B penalty to activate
 
 ---
 
@@ -143,7 +148,7 @@ dropJob24hId      string | null     — BullMQ job ID for 24h advance notificati
 dropJob1hId       string | null     — BullMQ job ID for 1h advance notification
 hasRescheduled    boolean           — gates the one-time reschedule (BL-65)
 listenCount       number default 0  — play counter; column: listen_count
-encryptedFileUrl  string            — MinIO path to AES-256-CBC .enc file
+encryptedFileUrl  string            — S3 object key in `mymusic-audio-enc` bucket (AES-256-CBC .enc file)
 genreIds          string[]          — simple-array of Genre UUIDs
 energy            number | null     — DSP composite score; NEVER expose in API
 ```
@@ -179,6 +184,40 @@ followeeId   string  — indexed
 type         'ARTIST' | 'USER'
 ```
 
+**`play-history.entity.ts`:**
+```
+skipped   boolean default false  — true when user skipped before 30s mark (Phase 10 BL-35B)
+                                   added Phase 10; column was missing before
+@Index(['userId', 'songId', 'skipped'])  — composite index for skip penalty lookup
+```
+
+**`recommendation-cache.entity.ts`** (Phase 10 — `src/modules/recommendations/entities/`):
+```
+userId      uuid FK → users
+mood        varchar nullable    — null = general recs; non-null = specific MoodType value
+songs       jsonb               — SongRecommendationDto[] pre-serialized; avoids re-scoring on read
+computedAt  timestamp
+expiresAt   timestamp           — computedAt + 86400s
+UNIQUE(userId, mood)            — null-safety handled via findOne+save in app layer
+                                  (PostgreSQL standard UNIQUE treats each NULL as distinct)
+```
+
+**`user-genre-preference.entity.ts`** (Phase 10 — `src/modules/users/entities/`):
+```
+userId    uuid   — indexed
+genreId   uuid   — FK to genres.id (not declared as ManyToOne — kept lightweight)
+UNIQUE(userId, genreId)
+Populated by POST /users/me/onboarding (implemented Phase 10)
+Read by RecommendationsService as cold-start fallback #1 (BL-35A)
+```
+
+**`user.entity.ts`** — Phase 10 addition:
+```
+onboardingCompleted   boolean default false   — set true on POST /users/me/onboarding
+                                               included in every buildUserResponse() call
+                                               FE reads from GET /users/me to guard redirect
+```
+
 ---
 
 ## Enum Values (Confirmed)
@@ -206,6 +245,7 @@ enum PaymentStatus   { PENDING | SUCCESS | FAILED | REFUNDED | ADMIN_GRANTED }
 enum PremiumType     { ONE_MONTH | THREE_MONTH | SIX_MONTH | TWELVE_MONTH }
 enum GenreSuggestionStatus { PENDING | APPROVED | REJECTED }
 enum DeviceType      { MOBILE | DESKTOP | TABLET | OTHER }
+enum MoodType        { HAPPY | SAD | FOCUS | CHILL | WORKOUT }  // Phase 10 — added to common/enums.ts
 ```
 
 **Song status machine:**
@@ -257,7 +297,7 @@ All queues registered in `QueueModule` (`@Global()`). Workers **must** be in the
 | `QUEUE_NAMES.DROP_NOTIFICATION` | `drop-notification` | `drop-notify-24h`, `drop-notify-1h` | `modules/queue/workers/drop-notification.worker.ts` |
 | `QUEUE_NAMES.GENRE_BULK_TAGGING` | `genre-bulk-tagging` | `bulk-tag-songs` | `modules/queue/workers/genre-bulk-tagging.worker.ts` |
 | `QUEUE_NAMES.SESSION_CLEANUP` | `session-cleanup` | `cleanup-session` | `modules/queue/workers/session-cleanup.worker.ts` |
-| `QUEUE_NAMES.RECOMMENDATION_BATCH` | `recommendation-batch` | `compute-batch` | Phase 10 — not built |
+| `QUEUE_NAMES.RECOMMENDATION_BATCH` | `recommendation-batch` | `compute-batch` | `modules/recommendations/workers/recommendation-batch.worker.ts` (triggered by `@Cron`, not BullMQ job) |
 
 **Cron schedule (all in respective services via `@Cron`):**
 
@@ -265,7 +305,7 @@ All queues registered in `QueueModule` (`@Global()`). Workers **must** be in the
 |----------|--------|---------|
 | `* * * * *` | Fire SCHEDULED drops → LIVE | `DropsService.fireDueDrops()` |
 | `0 * * * *` | Premium expiry + cascade download revoke | `PaymentsService` |
-| `0 2 * * *` | Recommendation batch compute | Phase 10 |
+| `0 3 * * *` | Recommendation batch compute | `RecommendationBatchWorker.runBatch()` |
 | `0 3 * * *` | Hard-delete expired download records | `DownloadsService` |
 | `0 0 * * *` | JWT denylist + verification code cleanup | `AuthService` |
 | `0 3 * * *` | Inactive session hard-delete | `SessionCleanupWorker` |
@@ -353,6 +393,31 @@ All queues registered in `QueueModule` (`@Global()`). Workers **must** be in the
 
 ---
 
+## Infrastructure Locked Decisions (post-Phase 9 migration)
+
+**Storage — AWS S3 via `@aws-sdk/client-s3` v3**
+- SDK: `@aws-sdk/client-s3` + `@aws-sdk/lib-storage` + `@aws-sdk/s3-request-presigner` — AWS SDK v3 only
+- Config namespace: `storage.*` in `src/config/storage.config.ts`; env vars: `AWS_REGION`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_S3_BUCKET_AUDIO`, `AWS_S3_BUCKET_AUDIO_ENC`, `AWS_S3_BUCKET_IMAGES`, `AWS_S3_PRESIGN_EXPIRES_SEC`
+- 3 buckets — bucket-per-type (not key prefixes): `mymusic-audio` (private), `mymusic-audio-enc` (private), `mymusic-images` (public-read)
+- `StorageService.getPublicUrl()` returns a direct S3 URL (`https://{bucket}.s3.{region}.amazonaws.com/{key}`) — no signing; requires `mymusic-images` bucket to have a public-read bucket policy
+- `StorageService.presignedGetObject()` returns a signed S3 URL — used for audio streaming (short TTL, BL-28) and encrypted file downloads (5 min, BL-53)
+- `StorageService.getBuckets()` returns `{ audio, audioEnc, images }` — use `getBuckets().audioEnc` for encrypted download presign; never hardcode bucket names
+- `StorageService` public API is unchanged — all callers (`songs`, `users`, `artist-profile`, `albums`, `downloads`, `follow`, `search`, `playlists`, `playback`) require zero changes
+- MinIO is fully removed — no container in docker-compose, no `minio.config.ts` import, no `minio` npm package
+- `src/config/minio.config.ts` is a dead file — delete it; never import it
+
+**Email — Gmail SMTP via Nodemailer App Password**
+- Config namespace: `mail.*` in `src/config/mail.config.ts`; env vars: `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `MAIL_FROM`
+- Transport: `smtp.gmail.com:587` STARTTLS (`secure: false`, `requireTLS: true`) — hardcoded in `MailService` constructor; not configurable via env
+- `MailService` public API unchanged — all 13 inline HTML templates untouched, `EmailWorker` untouched, all BullMQ `emailQueue.add('send-email', …)` callers untouched
+- MailHog is fully removed — no container in docker-compose, no `SMTP_HOST`/`SMTP_PORT` env vars
+
+**docker-compose services (dev + prod)**
+- Containers: `postgres`, `redis`, `api`, `dsp` only — MinIO and MailHog are gone
+- AWS S3 credentials come from `.env` via `env_file: .env` on the `api` service
+
+---
+
 ## What NOT To Do
 
 - **NEVER** `synchronize: true` in production — migrations only
@@ -371,6 +436,11 @@ All queues registered in `QueueModule` (`@Global()`). Workers **must** be in the
 - **NEVER** add `@Global()` to a new feature module without flagging — only infrastructure modules are global
 - **NEVER** use `song.encryptedFileUrl` raw — must decrypt AES key from `song_encryption_keys` first
 - **NEVER** use Tailwind `gray-*` palette in the FE — use CSS vars (`--surface`, `--muted-text`)
+- **NEVER** query the DB on a Redis recommendation cache hit — keys `rec:user:{userId}:general` and `rec:user:{userId}:mood:{MOOD}` are cache-aside; return immediately on hit
+- **NEVER** omit `onboardingCompleted` from `buildUserResponse()` in `UsersService` — FE `useAuthStore.AuthUser` reads it from `GET /users/me`; if absent the field is `undefined` (falsy) and every user gets redirected to onboarding on every login
+- **NEVER** include `song.energy` in any DTO or response — stripped at `toDto()` in `RecommendationsService`; internal DSP value only (BL-37A)
+- **NEVER** recommend non-LIVE songs — `WHERE status = 'LIVE'` enforced in `fetchCandidateSongs()` before scoring; all other statuses excluded
+- **NEVER** add a 90d time range to recommendations — permanently removed (Q2 GAP decision); only `7d` and `30d` are valid
 
 ---
 

@@ -4,11 +4,19 @@ import Link from 'next/link';
 import { useLocale } from 'next-intl';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
 import { Role } from '@mymusic/types';
 import { LayoutDashboard, User, Music2, KeyRound, LogOut } from 'lucide-react';
 import { getRoleHome } from '@/lib/utils/roleRedirect';
+import { RecommendationSection } from '@/components/recommendations/RecommendationSection';
+import { useRecommendations } from '@/hooks/useRecommendations';
+import { useMoodRecs } from '@/hooks/useMoodRecs';
+import { usePlayerStore } from '@/store/usePlayerStore';
+import { useQueue } from '@/hooks/useQueue';
+import { genresApi } from '@/lib/api/genres.api';
+import type { MoodType } from '@/lib/api/recommendations.api';
 
 /* ════════════════════════════════════════════════════════════════════════════
    CURSOR TRAIL
@@ -674,6 +682,206 @@ function UserMenu({ locale }: { locale: string }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   GUEST ZONE — top songs + genre links + sign-in banner
+   ════════════════════════════════════════════════════════════════════════════ */
+function GuestZone({ locale }: { locale: string }) {
+  const { data: genres } = useQuery({
+    queryKey: ['genres'],
+    queryFn: async () => {
+      const res = await genresApi.getGenres();
+      return (res.data?.data ?? res.data) as { id: string; name: string }[];
+    },
+    staleTime: 60 * 60 * 1000,
+  });
+
+  return (
+    <section
+      className="anim-fade-up"
+      style={{ padding: 'clamp(40px,5vw,60px) clamp(24px,6vw,96px) 0' }}
+    >
+      {/* Sign-in personalisation banner */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexWrap: 'wrap', gap: 14,
+        padding: '16px 24px', borderRadius: 10, marginBottom: 32,
+        border: '1px solid rgba(232,184,75,0.18)',
+        background: 'rgba(232,184,75,0.04)',
+      }}>
+        <p style={{ color: 'var(--muted-text)', fontSize: '0.85rem', margin: 0 }}>
+          Sign in for personalized picks
+        </p>
+        <Link href={`/${locale}/login`} style={{
+          padding: '7px 20px', borderRadius: 6, textDecoration: 'none',
+          background: 'var(--gold)', color: '#0d0d0d',
+          fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+        }}>
+          Sign in
+        </Link>
+      </div>
+
+      {/* Genre browse links */}
+      {genres && genres.length > 0 && (
+        <div style={{ marginBottom: 40 }}>
+          <p style={{
+            fontSize: '0.62rem', letterSpacing: '0.18em', textTransform: 'uppercase',
+            color: 'var(--muted-text)', marginBottom: 12, fontFamily: 'var(--font-body)',
+          }}>
+            Browse by genre
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {genres.slice(0, 12).map((g, i) => (
+              <Link
+                key={g.id}
+                href={`/${locale}/genres`}
+                className={`anim-fade-up anim-fade-up-${Math.min(i + 1, 8)}`}
+                style={{
+                  padding: '6px 14px', borderRadius: 99, textDecoration: 'none',
+                  border: '1px solid rgba(232,184,75,0.1)',
+                  background: 'rgba(17,17,17,0.8)',
+                  color: 'var(--muted-text)', fontSize: '0.78rem', fontWeight: 500,
+                  transition: 'all 0.2s cubic-bezier(0.16,1,0.3,1)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = 'rgba(232,184,75,0.35)';
+                  e.currentTarget.style.color = 'var(--ivory)';
+                  e.currentTarget.style.transform = 'translateY(-1px)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'rgba(232,184,75,0.1)';
+                  e.currentTarget.style.color = 'var(--muted-text)';
+                  e.currentTarget.style.transform = 'translateY(0)';
+                }}
+              >
+                {g.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div style={{ height: 1, background: 'rgba(232,184,75,0.07)' }} />
+    </section>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   AUTH ZONE — 3 recommendation sections for logged-in users
+   ════════════════════════════════════════════════════════════════════════════ */
+const MOOD_LABELS: Record<MoodType, string> = {
+  HAPPY: 'Happy', SAD: 'Sad', FOCUS: 'Focus', CHILL: 'Chill', WORKOUT: 'Workout',
+};
+
+function AuthZone({ locale }: { locale: string }) {
+  const { songs, isLoading, timeRange, setTimeRange, loadMore, hasMore } = useRecommendations(20);
+  const { songs: moodSongs, resolvedMood, inferred, isLoading: moodLoading } = useMoodRecs(undefined, 20);
+  const { setSong } = usePlayerStore();
+  const { addToQueue } = useQueue();
+
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const freshSongs = songs.filter((s) => new Date(s.createdAt).getTime() > thirtyDaysAgo);
+  const showFreshDrops = freshSongs.length >= 3;
+
+  const playAll = (tracks: typeof songs) => {
+    if (tracks.length === 0) return;
+    setSong({
+      id: tracks[0].id,
+      title: tracks[0].title,
+      artistName: tracks[0].artistName,
+      coverArtUrl: tracks[0].coverArtUrl,
+      fileUrl: '',
+      durationSeconds: tracks[0].duration,
+    });
+    tracks.slice(1).forEach((s) => addToQueue(s.id));
+  };
+
+  return (
+    <section style={{ padding: 'clamp(48px,6vw,80px) clamp(24px,6vw,96px) 0' }}>
+      {/* Section 1 — Picked for you */}
+      <RecommendationSection
+        title="Picked for you"
+        subtitle="Your personal top picks"
+        songs={songs}
+        loading={isLoading}
+        onPlayAll={() => playAll(songs)}
+        timeRangeToggle={{ value: timeRange, onChange: setTimeRange }}
+      />
+
+      {/* Section 2 — Based on your mood (inferred) */}
+      {(moodLoading || moodSongs.length > 0) && (
+        <RecommendationSection
+          title="Based on your mood"
+          subtitle={
+            inferred && resolvedMood
+              ? `Listening to: ${MOOD_LABELS[resolvedMood]}`
+              : 'Mood-matched picks'
+          }
+          songs={moodSongs}
+          loading={moodLoading}
+          onPlayAll={() => playAll(moodSongs)}
+        />
+      )}
+
+      {/* Section 3 — Fresh drops (client-side filter, ≥ 3 required) */}
+      {showFreshDrops && (
+        <RecommendationSection
+          title="Fresh drops"
+          subtitle="Added in the last 30 days"
+          songs={freshSongs}
+          loading={false}
+          onPlayAll={() => playAll(freshSongs)}
+        />
+      )}
+
+      {/* Load more / empty state */}
+      {!isLoading && songs.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0' }}>
+          <p style={{ color: 'var(--muted-text)', fontSize: '0.85rem', marginBottom: 14 }}>
+            Tell us what you like to get personalized picks.
+          </p>
+          <Link href={`/${locale}/onboarding`} style={{
+            color: 'var(--gold)', fontSize: '0.82rem', textDecoration: 'none',
+            borderBottom: '1px solid rgba(232,184,75,0.3)',
+            transition: 'opacity 0.15s',
+          }}>
+            Set your genres →
+          </Link>
+        </div>
+      )}
+
+      {hasMore && songs.length > 0 && !isLoading && (
+        <div style={{ textAlign: 'center', paddingTop: 8 }}>
+          <button
+            type="button"
+            onClick={loadMore}
+            style={{
+              padding: '8px 24px', borderRadius: 6, cursor: 'pointer',
+              border: '1px solid rgba(232,184,75,0.2)',
+              background: 'transparent', color: 'var(--muted-text)',
+              fontSize: '0.78rem', fontFamily: 'var(--font-body)',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = 'rgba(232,184,75,0.4)';
+              e.currentTarget.style.color = 'var(--ivory)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = 'rgba(232,184,75,0.2)';
+              e.currentTarget.style.color = 'var(--muted-text)';
+            }}
+          >
+            Load more
+          </button>
+        </div>
+      )}
+
+      <div style={{ height: 1, background: 'rgba(232,184,75,0.07)', marginTop: 48 }} />
+    </section>
+  );
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════════
    MAIN PAGE
    ════════════════════════════════════════════════════════════════════════════ */
 export default function HomePage() {
@@ -895,6 +1103,9 @@ export default function HomePage() {
 
       {/* ── MARQUEE ────────────────────────────────────────────────────────── */}
       <Marquee />
+
+      {/* ── PERSONALIZED RECS / GUEST EXPLORE ─────────────────────────────── */}
+      {user ? <AuthZone locale={locale} /> : <GuestZone locale={locale} />}
 
       {/* ── STATS ──────────────────────────────────────────────────────────── */}
       <section style={{

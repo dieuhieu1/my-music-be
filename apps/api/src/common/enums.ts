@@ -94,3 +94,11 @@ export enum ContentTargetType {
   ARTIST = 'ARTIST',
   USER = 'USER',
 }
+
+export enum MoodType {
+  HAPPY   = 'HAPPY',
+  SAD     = 'SAD',
+  FOCUS   = 'FOCUS',
+  CHILL   = 'CHILL',
+  WORKOUT = 'WORKOUT',
+}

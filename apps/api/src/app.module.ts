@@ -10,7 +10,8 @@ import Redis from 'ioredis';
 
 import { databaseConfig } from './config/database.config';
 import { redisConfig } from './config/redis.config';
-import { minioConfig } from './config/minio.config';
+import { storageConfig } from './config/storage.config';
+import { mailConfig } from './config/mail.config';
 import { jwtConfig } from './config/jwt.config';
 import { throttlerConfig } from './config/throttler.config';
 import { dspConfig } from './config/dsp.config';
@@ -38,6 +39,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { DropsModule } from './modules/drops/drops.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { RecommendationsModule } from './modules/recommendations/recommendations.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -45,7 +47,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     // ── Config (global) ────────────────────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, redisConfig, minioConfig, jwtConfig, throttlerConfig, dspConfig, paymentConfig],
+      load: [databaseConfig, redisConfig, storageConfig, mailConfig, jwtConfig, throttlerConfig, dspConfig, paymentConfig],
       envFilePath: '.env',
     }),
 
@@ -134,6 +136,9 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     // ── Phase 9: Reports, Analytics & Admin Tools ─────────────────────
     ReportsModule,
     AnalyticsModule,
+
+    // ── Phase 10: Recommendations & Mood Engine ────────────────────────
+    RecommendationsModule,
   ],
   providers: [
     // Global rate limiting

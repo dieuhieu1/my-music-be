@@ -3,6 +3,7 @@ import { getMessages } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { locales, type Locale } from '@/i18n/config';
 import AuthProvider from '@/components/providers/AuthProvider';
+import ReactQueryProvider from '@/components/providers/ReactQueryProvider';
 
 interface LocaleLayoutProps {
   children: React.ReactNode;
@@ -21,7 +22,9 @@ export default async function LocaleLayout({ children, params }: LocaleLayoutPro
 
   return (
     <NextIntlClientProvider locale={locale} messages={messages}>
-      <AuthProvider>{children}</AuthProvider>
+      <ReactQueryProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </ReactQueryProvider>
     </NextIntlClientProvider>
   );
 }

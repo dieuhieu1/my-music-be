@@ -14,6 +14,7 @@ export interface AuthUser {
   roles: Role[];
   followerCount: number;
   followingCount: number;
+  onboardingCompleted: boolean;
 }
 
 interface AuthState {

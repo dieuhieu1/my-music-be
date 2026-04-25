@@ -16,20 +16,18 @@ export class MailService {
   private readonly from: string;
 
   constructor(private readonly config: ConfigService) {
-    this.from = config.get<string>('SMTP_FROM') ?? 'noreply@mymusic.local';
-    const host = config.get<string>('SMTP_HOST') ?? 'localhost';
-    const port = config.get<number>('SMTP_PORT') ?? 1025;
-    const user = config.get<string>('SMTP_USER');
-    const pass = config.get<string>('SMTP_PASS');
-    const isGmail = host.includes('gmail.com');
+    this.from = config.get<string>('mail.from') ?? 'noreply@mymusic.app';
 
     this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      requireTLS: isGmail,
-      auth: user ? { user, pass } : undefined,
-      tls: isGmail ? { rejectUnauthorized: true } : undefined,
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,    // STARTTLS — upgraded by requireTLS below
+      requireTLS: true,
+      auth: {
+        user: config.get<string>('mail.user'),
+        pass: config.get<string>('mail.pass'),
+      },
+      tls: { rejectUnauthorized: true },
     });
   }
 
