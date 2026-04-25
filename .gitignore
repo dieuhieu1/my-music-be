@@ -1,3 +1,7 @@
+# Cloudflare tunnel binary
+cloudflared.exe
+cloudflared
+
 node_modules/
 dist/
 .env
