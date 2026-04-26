@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { Music2, ArrowLeft } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { Music2 } from 'lucide-react';
 import { genresApi, type Genre } from '@/lib/api/genres.api';
+import PublicHeader from '@/components/layout/PublicHeader';
 
 // Vivid genre card palettes — each is [gradientFrom, gradientTo, textAccent]
 const PALETTES = [
@@ -144,7 +145,6 @@ function GenreCard({ genre, locale, index }: { genre: Genre; locale: string; ind
 
 export default function GenresPage() {
   const { locale } = useParams<{ locale: string }>();
-  const router = useRouter();
   const [genres, setGenres]   = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -162,6 +162,7 @@ export default function GenresPage() {
       color: 'var(--ivory)',
       fontFamily: 'var(--font-body)',
     }}>
+      <PublicHeader locale={locale} />
 
       {/* Ambient orbs — more vivid this time */}
       {[
@@ -179,45 +180,7 @@ export default function GenresPage() {
         }} />
       ))}
 
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1200, margin: '0 auto', padding: '0 32px 80px' }}>
-
-        {/* ── Top nav ─────────────────────────────────────────────────────── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '20px 0 0',
-        }}>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--muted-text)', fontSize: '0.78rem',
-              fontFamily: 'var(--font-body)', padding: '6px 0',
-              transition: 'color 0.15s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--ivory)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted-text)')}
-          >
-            <ArrowLeft size={14} /> Back
-          </button>
-
-          <Link href={`/${locale}`} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: '50%', background: 'var(--gold)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 12px rgba(232,184,75,0.3)',
-            }}>
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
-                <path d="M7 3.5V14.5M7 3.5L13 6M7 3.5L13 6V11.5L7 14.5V3.5Z"
-                  stroke="#0d0d0d" strokeWidth="1.6" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 600, color: 'var(--ivory)' }}>
-              My Music
-            </span>
-          </Link>
-        </div>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1200, margin: '0 auto', padding: '68px 32px 80px' }}>
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="anim-fade-up anim-fade-up-1" style={{ padding: '48px 0 36px' }}>

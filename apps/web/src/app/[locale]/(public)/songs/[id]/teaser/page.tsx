@@ -8,6 +8,7 @@ import { songsApi } from '@/lib/api/songs.api';
 import { dropsApi } from '@/lib/api/drops.api';
 import { useAuthStore } from '@/store/useAuthStore';
 import DropCountdown from '@/components/drops/DropCountdown';
+import PublicHeader from '@/components/layout/PublicHeader';
 import { formatDistanceToNow } from 'date-fns';
 
 interface TeaserData {
@@ -119,6 +120,7 @@ export default function DropTeaserPage() {
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--charcoal)', position: 'relative', overflow: 'hidden' }}>
+      <PublicHeader locale={locale} />
 
       {/* ── Ambient blurred background ────────────────────────────────────── */}
       {teaser.coverArtUrl && (
@@ -135,30 +137,11 @@ export default function DropTeaserPage() {
         background: 'linear-gradient(to bottom, rgba(13,13,13,0.5) 0%, rgba(13,13,13,0.9) 60%, #0d0d0d 100%)',
       }} />
 
-      {/* ── Back nav ─────────────────────────────────────────────────────── */}
-      <div style={{ position: 'relative', zIndex: 2, padding: '20px 24px 0' }}>
-        <button
-          type="button"
-          onClick={() => router.back()}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: 'none', border: 'none',
-            color: 'var(--muted-text)', fontSize: '0.78rem',
-            fontFamily: 'var(--font-body)', cursor: 'pointer',
-            transition: 'color 0.15s',
-          }}
-          onMouseEnter={e => { e.currentTarget.style.color = 'var(--ivory)'; }}
-          onMouseLeave={e => { e.currentTarget.style.color = 'var(--muted-text)'; }}
-        >
-          <ArrowLeft size={13} /> Back
-        </button>
-      </div>
-
       {/* ── Main card ────────────────────────────────────────────────────── */}
       <div style={{
         position: 'relative', zIndex: 2,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        padding: '40px 24px 80px',
+        padding: '108px 24px 80px',
         minHeight: 'calc(100vh - 60px)',
         justifyContent: 'center',
       }}>

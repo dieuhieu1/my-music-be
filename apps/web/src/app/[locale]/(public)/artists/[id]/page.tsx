@@ -6,7 +6,8 @@ import { useParams } from 'next/navigation';
 import { artistApi, type ArtistProfile } from '@/lib/api/artist.api';
 import { useAuthStore } from '@/store/useAuthStore';
 import FollowButton from '@/components/profile/FollowButton';
-import { ArrowLeft, Music2, Users, Headphones, ExternalLink, Loader2 } from 'lucide-react';
+import PublicHeader from '@/components/layout/PublicHeader';
+import { Music2, Users, Headphones, ExternalLink, Loader2 } from 'lucide-react';
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -86,45 +87,7 @@ export default function PublicArtistProfilePage() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--charcoal)' }}>
-
-      {/* ── Minimal top bar ───────────────────────────────────────────────── */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10,
-        padding: '14px 24px',
-        background: 'linear-gradient(to bottom, rgba(13,13,13,0.9) 0%, transparent 100%)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      }}>
-        <button
-          type="button"
-          onClick={() => window.history.back()}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: 20, padding: '6px 14px',
-            color: 'var(--ivory)', fontSize: '0.75rem',
-            fontFamily: 'var(--font-body)', cursor: 'pointer',
-            backdropFilter: 'blur(8px)',
-            transition: 'background 0.2s',
-          }}
-        >
-          <ArrowLeft size={13} /> Back
-        </button>
-
-        <Link href={`/${locale}`} style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
-          <div style={{
-            width: 24, height: 24, borderRadius: '50%',
-            background: 'var(--gold)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
-              <path d="M7 3.5V14.5M7 3.5L13 6M7 3.5L13 6V11.5L7 14.5V3.5Z" stroke="#0d0d0d" strokeWidth="1.6" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 600, color: 'var(--ivory)' }}>
-            My Music
-          </span>
-        </Link>
-      </div>
+      <PublicHeader locale={locale} />
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div style={{ position: 'relative', minHeight: 480, overflow: 'hidden' }}>

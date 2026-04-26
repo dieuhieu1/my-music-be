@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { Search, Users, Headphones, ArrowLeft, X } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { Search, Users, Headphones, X } from 'lucide-react';
 import { artistApi, type ArtistProfile } from '@/lib/api/artist.api';
+import PublicHeader from '@/components/layout/PublicHeader';
 
 const PAGE_SIZE = 20;
 
@@ -115,7 +116,6 @@ function ArtistCard({ artist, locale, index }: { artist: ArtistProfile; locale: 
 
 export default function ArtistsPage() {
   const { locale } = useParams<{ locale: string }>();
-  const router = useRouter();
 
   const [artists, setArtists] = useState<ArtistProfile[]>([]);
   const [total, setTotal]     = useState(0);
@@ -173,6 +173,8 @@ export default function ArtistsPage() {
       color: 'var(--ivory)',
       fontFamily: 'var(--font-body)',
     }}>
+      <PublicHeader locale={locale} />
+
       {/* Ambient orbs */}
       {[
         { top: '-10%', left: '-5%', size: 500, color: 'rgba(232,184,75,0.04)' },
@@ -188,49 +190,7 @@ export default function ArtistsPage() {
         }} />
       ))}
 
-      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1200, margin: '0 auto', padding: '0 32px 80px' }}>
-
-        {/* ── Top nav ──────────────────────────────────────────────────────── */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '20px 0 0',
-        }}>
-          <button
-            type="button"
-            onClick={() => router.back()}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 7,
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: 'var(--muted-text)', fontSize: '0.78rem',
-              fontFamily: 'var(--font-body)', padding: '6px 0',
-              transition: 'color 0.15s',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.color = 'var(--ivory)')}
-            onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted-text)')}
-          >
-            <ArrowLeft size={14} /> Back
-          </button>
-
-          <Link href={`/${locale}`} style={{
-            display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none',
-          }}>
-            <div style={{
-              width: 24, height: 24, borderRadius: '50%',
-              background: 'var(--gold)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 0 12px rgba(232,184,75,0.3)',
-            }}>
-              <svg width="12" height="12" viewBox="0 0 18 18" fill="none">
-                <path d="M7 3.5V14.5M7 3.5L13 6M7 3.5L13 6V11.5L7 14.5V3.5Z"
-                  stroke="#0d0d0d" strokeWidth="1.6" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <span style={{
-              fontFamily: 'var(--font-display)', fontSize: '0.95rem',
-              fontWeight: 600, color: 'var(--ivory)',
-            }}>My Music</span>
-          </Link>
-        </div>
+      <div style={{ position: 'relative', zIndex: 1, maxWidth: 1200, margin: '0 auto', padding: '68px 32px 80px' }}>
 
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <div className="anim-fade-up anim-fade-up-1" style={{ padding: '48px 0 32px' }}>
