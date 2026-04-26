@@ -69,6 +69,30 @@ export class ArtistProfileService {
     return this.buildArtistResponse(reloaded!);
   }
 
+  // ── GET /artists — paginated list with optional name search ──────────────
+
+  async findAll(page: number, limit: number, search?: string) {
+    const qb = this.artists
+      .createQueryBuilder('ap')
+      .leftJoinAndSelect('ap.user', 'user')
+      .orderBy('ap.followerCount', 'DESC');
+
+    if (search?.trim()) {
+      qb.where('LOWER(ap.stageName) LIKE :q', {
+        q: `%${search.trim().toLowerCase()}%`,
+      });
+    }
+
+    const [profiles, total] = await qb
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
+
+    const items = await Promise.all(profiles.map((p) => this.buildArtistResponse(p)));
+
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
   // ── Response builder ──────────────────────────────────────────────────────
 
   private async buildArtistResponse(profile: ArtistProfile) {

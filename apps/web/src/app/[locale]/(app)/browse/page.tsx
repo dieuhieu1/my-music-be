@@ -99,7 +99,7 @@ export default function BrowsePage() {
           fontSize: 'clamp(1.8rem,4vw,2.6rem)',
           fontWeight: 300, color: 'var(--ivory)', letterSpacing: '-0.02em', marginBottom: 8,
         }}>
-          Browse Music
+          Explore
         </h1>
 
         {/* Search bar */}

@@ -1,6 +1,7 @@
 import { registerAs } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { join } from 'path';
+import { PrettyTypeOrmLogger } from '../common/logger/typeorm.logger';
 
 export const databaseConfig = registerAs(
   'database',
@@ -11,11 +12,9 @@ export const databaseConfig = registerAs(
     username: process.env.DB_USER || 'mymusic',
     password: process.env.DB_PASSWORD || 'mymusic_password',
     database: process.env.DB_NAME || 'mymusic_db',
-    // Entities are registered per-module via TypeOrmModule.forFeature()
     autoLoadEntities: true,
-    // Auto-create tables from entities in development (use migrations in production)
     synchronize: process.env.NODE_ENV !== 'production',
-    logging: process.env.NODE_ENV === 'development',
+    logger: new PrettyTypeOrmLogger(),
     migrations: [join(__dirname, '..', 'database', 'migrations', '*.{ts,js}')],
     migrationsRun: false,
   }),

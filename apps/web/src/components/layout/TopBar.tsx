@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, User, LogOut, Music2, Shield, KeyRound, LayoutDashboard, Crown } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
@@ -13,7 +13,9 @@ import NotificationBell from '@/components/layout/NotificationBell';
 export default function TopBar() {
   const { locale } = useParams<{ locale: string }>();
   const router = useRouter();
+  const pathname = usePathname();
   const { user, hasRole, clearUser } = useAuthStore();
+  const isExplorePage = pathname === `/${locale}/browse` || pathname.startsWith(`/${locale}/browse/`);
 
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -71,8 +73,8 @@ export default function TopBar() {
       transition: 'background 0.25s, backdrop-filter 0.25s, border-color 0.25s',
     }}>
 
-      {/* ── Left: nav arrows ─────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', gap: 6 }}>
+      {/* ── Left: nav arrows + Explore link ──────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {[
           { icon: <ChevronLeft size={16} />, action: () => router.back() },
           { icon: <ChevronRight size={16} />, action: () => router.forward() },
@@ -94,6 +96,36 @@ export default function TopBar() {
             {icon}
           </button>
         ))}
+
+        {/* Explore pill — Spotify-style top-nav link */}
+        <Link
+          href={`/${locale}/browse`}
+          style={{
+            marginLeft: 8,
+            padding: '6px 16px',
+            borderRadius: 20,
+            background: isExplorePage ? 'var(--ivory)' : 'rgba(255,255,255,0.08)',
+            color: isExplorePage ? 'var(--charcoal)' : 'var(--ivory)',
+            fontSize: '0.82rem',
+            fontFamily: 'var(--font-body)',
+            fontWeight: 600,
+            letterSpacing: '0.01em',
+            textDecoration: 'none',
+            transition: 'background 0.18s, color 0.18s',
+          }}
+          onMouseEnter={e => {
+            if (!isExplorePage) {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.14)';
+            }
+          }}
+          onMouseLeave={e => {
+            if (!isExplorePage) {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.08)';
+            }
+          }}
+        >
+          Explore
+        </Link>
       </div>
 
       {/* ── Right: notification bell + user area ─────────────────────────── */}

@@ -119,8 +119,14 @@ export class AuthService {
   }
 
   private clearAuthCookies(res: Response) {
-    res.clearCookie('access_token');
-    res.clearCookie('refresh_token');
+    const opts = {
+      httpOnly: true,
+      secure: this.config.get('NODE_ENV') === 'production',
+      sameSite: 'lax' as const,
+      path: '/',
+    };
+    res.clearCookie('access_token', opts);
+    res.clearCookie('refresh_token', opts);
   }
 
   private parseDeviceType(ua: string): DeviceType {
@@ -242,8 +248,18 @@ export class AuthService {
 
   // ── Logout (BL-03) ────────────────────────────────────────────────────────
 
-  async logout(sessionId: string, res: Response) {
-    await this.sessions.softDelete({ id: sessionId });
+  async logout(userId: string, req: Request, res: Response) {
+    const refreshToken = req.cookies?.refresh_token;
+    if (refreshToken) {
+      try {
+        const payload = this.jwt.verify(refreshToken, {
+          secret: this.config.get('JWT_REFRESH_SECRET'),
+        }) as { sub: string; jti: string };
+        await this.sessions.softDelete({ refreshTokenId: payload.jti, userId });
+      } catch {
+        // Refresh token already expired/invalid — cron will clean up the session
+      }
+    }
     this.clearAuthCookies(res);
     return { message: 'Logged out' };
   }

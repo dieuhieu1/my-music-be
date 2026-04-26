@@ -35,6 +35,19 @@ export class ArtistProfileController {
     private readonly followService: FollowService,
   ) {}
 
+  // ── GET /artists — public paginated list ────────────────────────────────
+  // Declared before :id routes so the empty-segment path is matched first.
+
+  @Public()
+  @Get()
+  getAll(
+    @Query('page') page = 1,
+    @Query('limit') limit = 20,
+    @Query('search') search?: string,
+  ) {
+    return this.artistProfileService.findAll(Number(page), Math.min(Number(limit), 50), search);
+  }
+
   // ── PATCH /artists/me/profile (BL-67) ────────────────────────────────────
   // Declared before :id routes — 'me' is a literal segment, not a UUID param.
 

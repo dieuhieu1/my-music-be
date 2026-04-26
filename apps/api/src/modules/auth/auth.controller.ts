@@ -117,16 +117,14 @@ export class AuthController {
 
   // ── Authenticated endpoints ────────────────────────────────────────────────
 
-  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   logout(
-    @Req() req: Request & { user: User; sessionId?: string },
+    @CurrentUser() user: User,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // sessionId injected by JwtStrategy via request — fallback to param
-    const sessionId = (req as any).sessionId ?? '';
-    return this.authService.logout(sessionId, res);
+    return this.authService.logout(user.id, req, res);
   }
 
   @Post('change-password')

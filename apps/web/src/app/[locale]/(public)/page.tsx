@@ -934,8 +934,12 @@ export default function HomePage() {
 
         {/* Nav */}
         <nav style={{ display: 'flex', gap: 36, alignItems: 'center' }}>
-          {['Explore', 'Artists', 'Genres'].map(label => (
-            <Link key={label} href={`/${locale}/${label.toLowerCase()}`} style={{
+          {[
+            { label: 'Explore', href: 'browse' },
+            { label: 'Artists', href: 'artists' },
+            { label: 'Genres',  href: 'genres'  },
+          ].map(({ label, href }) => (
+            <Link key={label} href={`/${locale}/${href}`} style={{
               fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase',
               color: 'var(--muted-text)', textDecoration: 'none', fontWeight: 500,
               position: 'relative', paddingBottom: 2,
@@ -946,6 +950,7 @@ export default function HomePage() {
             </Link>
           ))}
         </nav>
+
 
         {/* CTAs / user menu */}
         <UserMenu locale={locale} />

@@ -20,6 +20,10 @@ export interface ArtistProfile {
 }
 
 export const artistApi = {
+  // GET /artists — paginated list, optional search by stageName
+  getArtists: (params: { page?: number; limit?: number; search?: string } = {}) =>
+    apiClient.get('/artists', { params }),
+
   // GET /artists/:id/profile — :id is the artist's userId
   getArtistProfile: (userId: string) =>
     apiClient.get(`/artists/${userId}/profile`),

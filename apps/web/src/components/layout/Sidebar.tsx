@@ -33,7 +33,7 @@ interface NavItem {
 }
 
 const listenerItems: NavItem[] = [
-  { href: '/browse',          label: 'Browse',          Icon: Compass      },
+  { href: '/browse',          label: 'Explore',         Icon: Compass      },
   { href: '/queue',           label: 'Queue',           Icon: ListOrdered  },
   { href: '/playlists',       label: 'Playlists',       Icon: ListMusic    },
   { href: '/playlists/liked', label: 'Liked Songs',     Icon: Heart        },
