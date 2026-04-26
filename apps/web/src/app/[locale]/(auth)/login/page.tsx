@@ -50,7 +50,13 @@ export default function LoginPage() {
       const res = await authApi.login(data);
       const user = (res.data as any)?.data?.user ?? (res.data as any)?.user;
       if (user) setUser(user);
-      router.push(getRoleHome(user?.roles, locale));
+      const roles: string[] = user?.roles ?? [];
+      const isRegularUser = !roles.includes('ARTIST') && !roles.includes('ADMIN');
+      if (isRegularUser && !user?.onboardingCompleted) {
+        router.push(`/${locale}/onboarding`);
+      } else {
+        router.push(getRoleHome(user?.roles, locale));
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.error?.message ?? 'Login failed. Please try again.';
       if (err?.response?.status === 403 && msg.toLowerCase().includes('locked')) {

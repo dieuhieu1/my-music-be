@@ -245,6 +245,7 @@ export class AdminService {
         's.createdAt',
         's.dropAt',
         's.listenCount',
+        's.coverArtUrl',
         'ap.stageName',
       ])
       .orderBy('s.createdAt', 'DESC')
@@ -267,13 +268,14 @@ export class AdminService {
     const { entities, raw } = await qb.getRawAndEntities();
 
     const items = entities.map((s, i) => ({
-      id:         s.id,
-      title:      s.title,
-      artistName: (raw[i] as any)?.ap_stage_name ?? null,
-      status:     s.status,
-      createdAt:  s.createdAt,
-      dropAt:     s.dropAt,
-      totalPlays: s.listenCount,
+      id:          s.id,
+      title:       s.title,
+      artistName:  (raw[i] as any)?.ap_stage_name ?? null,
+      coverArtUrl: s.coverArtUrl ?? null,
+      status:      s.status,
+      createdAt:   s.createdAt,
+      dropAt:      s.dropAt,
+      totalPlays:  s.listenCount,
       // energy intentionally excluded per locked decision
     }));
 

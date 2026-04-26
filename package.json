@@ -5,6 +5,7 @@
   "workspaces": [
     "apps/api",
     "apps/web",
+    "apps/admin",
     "packages/*",
     "tests"
   ],
@@ -12,6 +13,8 @@
     "api:dev": "npm run start:dev --workspace=apps/api",
     "api:build": "npm run build --workspace=apps/api",
     "web:dev": "npm run dev --workspace=apps/web",
+    "admin:dev": "npm run dev --workspace=apps/admin",
+    "admin:build": "npm run build --workspace=apps/admin",
     "types:build": "npm run build --workspace=packages/types",
     "test:api": "npm run test:api --workspace=tests",
     "test:e2e": "npm run test:e2e --workspace=tests",

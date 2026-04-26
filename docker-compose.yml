@@ -105,6 +105,30 @@ services:
     networks:
       - mymusic-net
 
+  # ── Admin Portal ──────────────────────────────────────────────────────────
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      target: dev
+    container_name: mymusic-admin
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+      NEXT_PUBLIC_ADMIN_URL: http://localhost:3002
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./apps/admin/app:/app/apps/admin/app
+      - ./apps/admin/components:/app/apps/admin/components
+      - ./apps/admin/lib:/app/apps/admin/lib
+      - ./apps/admin/store:/app/apps/admin/store
+      - ./apps/admin/middleware.ts:/app/apps/admin/middleware.ts
+    depends_on:
+      - api
+    networks:
+      - mymusic-net
+
   # ── Python DSP Sidecar ────────────────────────────────────────────────────
   dsp:
     build:

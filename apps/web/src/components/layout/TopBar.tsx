@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, User, LogOut, Music2, Shield, KeyRound, LayoutDashboard, Crown } from 'lucide-react';
+import {
+  ChevronLeft, ChevronRight, User, LogOut, Music2,
+  LayoutDashboard, Crown,
+} from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
 import { Role } from '@mymusic/types';
@@ -12,9 +15,10 @@ import NotificationBell from '@/components/layout/NotificationBell';
 
 export default function TopBar() {
   const { locale } = useParams<{ locale: string }>();
-  const router = useRouter();
+  const router   = useRouter();
   const pathname = usePathname();
   const { user, hasRole, clearUser } = useAuthStore();
+
   const isExplorePage = pathname === `/${locale}/browse` || pathname.startsWith(`/${locale}/browse/`);
 
   const [open, setOpen] = useState(false);
@@ -42,12 +46,10 @@ export default function TopBar() {
     : '?';
 
   const isArtist = hasRole(Role.ARTIST);
-  const isAdmin  = hasRole(Role.ADMIN);
 
   return (
     <div style={{
-      position: 'sticky',
-      top: 0,
+      position: 'relative',
       zIndex: 30,
       display: 'flex',
       alignItems: 'center',
@@ -59,7 +61,7 @@ export default function TopBar() {
       boxShadow: '0 2px 0 var(--gold), 0 4px 32px rgba(232,184,75,0.25), 0 1px 80px rgba(232,184,75,0.10)',
     }}>
 
-      {/* ── Left: nav arrows + Explore link ──────────────────────────────── */}
+      {/* ── Left: nav arrows + Explore pill ─────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {[
           { icon: <ChevronLeft size={16} />, action: () => router.back() },
@@ -74,16 +76,15 @@ export default function TopBar() {
               background: 'rgba(13,13,13,0.06)',
               color: 'var(--charcoal)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.2s cubic-bezier(0.16,1,0.3,1), color 0.2s cubic-bezier(0.16,1,0.3,1)',
+              transition: 'background 0.15s, color 0.15s',
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(13,13,13,0.1)'; e.currentTarget.style.color = 'var(--gold)'; }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(13,13,13,0.12)'; e.currentTarget.style.color = 'var(--gold-dim)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(13,13,13,0.06)'; e.currentTarget.style.color = 'var(--charcoal)'; }}
           >
             {icon}
           </button>
         ))}
 
-        {/* Explore pill */}
         <Link
           href={`/${locale}/browse`}
           style={{
@@ -97,26 +98,21 @@ export default function TopBar() {
             fontWeight: isExplorePage ? 700 : 500,
             letterSpacing: '0.01em',
             textDecoration: 'none',
-            transition: 'background 0.18s, font-weight 0.18s',
+            transition: 'background 0.18s',
           }}
-          onMouseEnter={e => {
-            if (!isExplorePage) (e.currentTarget as HTMLElement).style.background = 'rgba(13,13,13,0.12)';
-          }}
-          onMouseLeave={e => {
-            if (!isExplorePage) (e.currentTarget as HTMLElement).style.background = 'rgba(13,13,13,0.07)';
-          }}
+          onMouseEnter={e => { if (!isExplorePage) (e.currentTarget as HTMLElement).style.background = 'rgba(13,13,13,0.12)'; }}
+          onMouseLeave={e => { if (!isExplorePage) (e.currentTarget as HTMLElement).style.background = 'rgba(13,13,13,0.07)'; }}
         >
           Explore
         </Link>
       </div>
 
-      {/* ── Right: notification bell + user area ─────────────────────────── */}
+      {/* ── Right: notification + user ───────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {user && <NotificationBell />}
         <div style={{ position: 'relative' }} ref={dropdownRef}>
           {user ? (
             <>
-              {/* Avatar + name button */}
               <button
                 type="button"
                 onClick={() => setOpen((v) => !v)}
@@ -130,7 +126,6 @@ export default function TopBar() {
                 onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'rgba(13,13,13,0.1)'; }}
                 onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(13,13,13,0.05)'; }}
               >
-                {/* Avatar */}
                 {user.avatarUrl ? (
                   <img
                     src={user.avatarUrl}
@@ -148,8 +143,6 @@ export default function TopBar() {
                     {initials}
                   </div>
                 )}
-
-                {/* Name */}
                 <span style={{
                   fontSize: '0.8rem', fontWeight: 500, color: 'var(--charcoal)',
                   maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -157,8 +150,6 @@ export default function TopBar() {
                 }}>
                   {user.name}
                 </span>
-
-                {/* Caret */}
                 <ChevronRight size={12} style={{
                   color: 'var(--charcoal)', marginRight: 2, flexShrink: 0,
                   transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
@@ -166,7 +157,6 @@ export default function TopBar() {
                 }} />
               </button>
 
-              {/* Dropdown — stays dark, floats over page content */}
               {open && (
                 <div
                   className="anim-fade-up"
@@ -178,7 +168,6 @@ export default function TopBar() {
                     zIndex: 50,
                   }}
                 >
-                  {/* User info header */}
                   <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
                     <p style={{ fontSize: '0.82rem', fontWeight: 500, color: 'var(--ivory)', marginBottom: 2 }}>
                       {user.name}
@@ -188,22 +177,17 @@ export default function TopBar() {
                     </p>
                   </div>
 
-                  {/* Menu items */}
                   <div style={{ padding: '6px 0' }}>
                     <DropItem href={getRoleHome(user?.roles, locale)} icon={<LayoutDashboard size={13} />} label="Home"          onClick={() => setOpen(false)} />
-                    <DropItem href={`/${locale}/profile`}             icon={<User size={13} />}            label="Account"         onClick={() => setOpen(false)} />
-                    <DropItem href={`/${locale}/profile/premium`}     icon={<Crown size={13} />}           label="Premium"         onClick={() => setOpen(false)} />
+                    <DropItem href={`/${locale}/profile`}             icon={<User size={13} />}            label="Account"        onClick={() => setOpen(false)} />
+                    <DropItem href={`/${locale}/profile/premium`}     icon={<Crown size={13} />}           label="Premium"        onClick={() => setOpen(false)} />
                     {isArtist && (
-                      <DropItem href={`/${locale}/artist/profile`}   icon={<Music2 size={13} />}          label="Artist Studio"   onClick={() => setOpen(false)} />
-                    )}
-                    {isAdmin && (
-                      <DropItem href={`/${locale}/admin`}            icon={<Shield size={13} />}          label="Admin Portal"    onClick={() => setOpen(false)} />
+                      <DropItem href={`/${locale}/artist/profile`}   icon={<Music2 size={13} />}          label="Artist Studio"  onClick={() => setOpen(false)} />
                     )}
                   </div>
 
                   <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
 
-                  {/* Logout */}
                   <div style={{ padding: '6px 0' }}>
                     <button
                       type="button"
@@ -226,7 +210,6 @@ export default function TopBar() {
               )}
             </>
           ) : (
-            /* Not logged in */
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <Link
                 href={`/${locale}/login`}
@@ -235,7 +218,7 @@ export default function TopBar() {
                   fontFamily: 'var(--font-body)', fontWeight: 500, letterSpacing: '0.03em',
                   color: 'var(--charcoal)', textDecoration: 'none',
                   border: '1px solid rgba(13,13,13,0.2)',
-                  transition: 'border-color 0.15s, color 0.15s cubic-bezier(0.16,1,0.3,1)',
+                  transition: 'border-color 0.15s, color 0.15s',
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--gold)'; e.currentTarget.style.color = 'var(--gold-dim)'; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(13,13,13,0.2)'; e.currentTarget.style.color = 'var(--charcoal)'; }}
@@ -261,8 +244,9 @@ export default function TopBar() {
   );
 }
 
-// ── Dropdown link item (dark panel — keep light text) ─────────────────────────
-function DropItem({ href, icon, label, onClick }: { href: string; icon: React.ReactNode; label: string; onClick: () => void }) {
+function DropItem({ href, icon, label, onClick }: {
+  href: string; icon: React.ReactNode; label: string; onClick: () => void;
+}) {
   return (
     <Link
       href={href}

@@ -1,22 +1,42 @@
+'use client';
+
+import { useParams, usePathname } from 'next/navigation';
 import Sidebar from '@/components/layout/Sidebar';
 import PlayerBar from '@/components/layout/PlayerBar';
 import TopBar from '@/components/layout/TopBar';
+import AdminSidebar from '@/components/layout/AdminSidebar';
+import AdminTopBar from '@/components/layout/AdminTopBar';
 
-// Persistent shell for all authenticated app routes.
-// Sidebar + main content area + fixed PlayerBar at the bottom.
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const { locale } = useParams<{ locale: string }>();
+  const pathname   = usePathname();
+
+  if (pathname.startsWith(`/${locale}/admin`)) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column',
+        height: '100vh', backgroundColor: '#080808',
+      }}>
+        <AdminTopBar />
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <AdminSidebar />
+          <main style={{ flex: 1, overflowY: 'auto', backgroundColor: '#080808' }}>
+            {children}
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen flex-col">
-      {/* Main area: sidebar + content */}
+      <TopBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
         <main className="flex-1 overflow-y-auto pb-24">
-          {/* <TopBar /> */}
           {children}
         </main>
       </div>
-
-      {/* Fixed player bar at the bottom */}
       <PlayerBar />
     </div>
   );

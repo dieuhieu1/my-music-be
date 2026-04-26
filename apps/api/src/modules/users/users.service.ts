@@ -74,9 +74,9 @@ export class UsersService {
         this.genrePrefs.create({ userId, genreId }),
       );
       await this.genrePrefs.save(prefs);
+      user.onboardingCompleted = true;
     }
-
-    user.onboardingCompleted = true;
+    // skipped: true → onboardingCompleted stays false; shown again on next login
     const saved = await this.users.save(user);
     return this.buildUserResponse(saved);
   }

@@ -38,7 +38,9 @@ export default function OnboardingPage() {
       usersApi.completeOnboarding(dto),
     onSuccess: (res) => {
       const updated = res.data?.data ?? res.data;
-      setUser({ ...user!, ...updated, onboardingCompleted: true });
+      // Use the server value — skipped keeps onboardingCompleted false so
+      // the genre picker shows again on next login
+      setUser({ ...user!, ...updated });
       router.push(`/${locale}/browse`);
     },
   });

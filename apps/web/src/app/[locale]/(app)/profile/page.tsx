@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { usersApi, type UserProfile } from '@/lib/api/users.api';
-import { Edit3, Lock, MonitorSmartphone, Star, Users, UserCheck, Crown, Loader2 } from 'lucide-react';
+import { Edit3, Lock, MonitorSmartphone, Crown, Loader2, ChevronRight, Zap, Download, Headphones } from 'lucide-react';
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -241,9 +241,124 @@ export default function ProfilePage() {
         </div>
       </div>
 
+      {/* ── Premium section ───────────────────────────────────────────────── */}
+      <div className="anim-fade-up anim-fade-up-3" style={{ padding: '20px 24px 0' }}>
+        <p style={{ fontSize: '0.63rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 12 }}>
+          Membership
+        </p>
+
+        {profile.isPremium ? (
+          /* ── Already premium: show status card ── */
+          <Link
+            href={`/${locale}/profile/premium`}
+            style={{ textDecoration: 'none', display: 'block' }}
+          >
+            <div style={{
+              padding: '18px 20px',
+              background: 'linear-gradient(120deg, rgba(232,184,75,0.08) 0%, rgba(160,120,50,0.05) 100%)',
+              border: '1px solid rgba(232,184,75,0.22)',
+              borderRadius: 8,
+              display: 'flex', alignItems: 'center', gap: 16,
+              transition: 'border-color 0.18s, background 0.18s',
+            }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(232,184,75,0.4)';
+                (e.currentTarget as HTMLElement).style.background = 'linear-gradient(120deg, rgba(232,184,75,0.12) 0%, rgba(160,120,50,0.08) 100%)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = 'rgba(232,184,75,0.22)';
+                (e.currentTarget as HTMLElement).style.background = 'linear-gradient(120deg, rgba(232,184,75,0.08) 0%, rgba(160,120,50,0.05) 100%)';
+              }}
+            >
+              <div style={{
+                width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
+                background: 'rgba(232,184,75,0.12)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 18px rgba(232,184,75,0.2)',
+              }}>
+                <Crown size={18} style={{ color: 'var(--gold)' }} />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--gold)', marginBottom: 3 }}>
+                  Premium Active
+                </p>
+                <p style={{ fontSize: '0.72rem', color: 'var(--muted-text)' }}>
+                  {profile.premiumExpiresAt
+                    ? `Expires ${new Date(profile.premiumExpiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                    : 'Unlimited access'}
+                </p>
+              </div>
+              <ChevronRight size={16} style={{ color: 'var(--muted-text)', flexShrink: 0 }} />
+            </div>
+          </Link>
+        ) : (
+          /* ── Not premium: upgrade banner ── */
+          <Link
+            href={`/${locale}/profile/premium`}
+            style={{ textDecoration: 'none', display: 'block' }}
+          >
+            <div style={{
+              padding: '20px 22px',
+              background: '#0e0c09',
+              border: '1px solid rgba(232,184,75,0.15)',
+              borderRadius: 8,
+              position: 'relative', overflow: 'hidden',
+              transition: 'border-color 0.18s',
+            }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'rgba(232,184,75,0.32)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = 'rgba(232,184,75,0.15)'}
+            >
+              {/* ambient glow */}
+              <div style={{
+                position: 'absolute', top: -30, right: -30, width: 140, height: 140,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(232,184,75,0.07) 0%, transparent 70%)',
+                pointerEvents: 'none',
+              }} />
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, position: 'relative' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <Crown size={18} style={{ color: 'var(--gold)' }} />
+                  <span style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: '1rem', fontWeight: 500,
+                    color: 'var(--ivory)', letterSpacing: '-0.01em',
+                  }}>
+                    Upgrade to Premium
+                  </span>
+                </div>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  padding: '5px 12px',
+                  background: 'var(--gold)',
+                  borderRadius: 20,
+                  fontSize: '0.7rem', fontWeight: 700,
+                  color: '#0d0d0d', letterSpacing: '0.04em',
+                }}>
+                  Get Premium <ChevronRight size={12} />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 20, position: 'relative' }}>
+                {[
+                  { icon: <Download size={13} />, text: 'Unlimited downloads' },
+                  { icon: <Headphones size={13} />, text: 'Ad-free listening' },
+                  { icon: <Zap size={13} />, text: 'Offline mode' },
+                ].map(({ icon, text }) => (
+                  <div key={text} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ color: 'var(--gold)', opacity: 0.8 }}>{icon}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--muted-text)' }}>{text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Link>
+        )}
+      </div>
+
       {/* ── Detail card ──────────────────────────────────────────────────── */}
       <div
-        className="anim-fade-up anim-fade-up-3"
+        className="anim-fade-up anim-fade-up-4"
         style={{ margin: '20px 24px 32px', padding: '20px 24px', background: '#111111', border: '1px solid #1a1a1a', borderRadius: 8 }}
       >
         <p style={{ fontSize: '0.63rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--gold)', marginBottom: 16 }}>

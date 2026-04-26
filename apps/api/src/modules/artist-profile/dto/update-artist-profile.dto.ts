@@ -35,17 +35,16 @@ export class UpdateArtistProfileDto {
   bio?: string;
 
   // When sent via multipart/form-data the value arrives as a JSON string.
-  // The @Transform parses it before validation runs.
+  // @Transform handles both cases and instantiates SocialLinkDto so that
+  // class-validator whitelist can resolve property names against the class.
   @IsOptional()
   @Transform(({ value }) => {
+    let arr = value;
     if (typeof value === 'string') {
-      try {
-        return JSON.parse(value);
-      } catch {
-        return undefined;
-      }
+      try { arr = JSON.parse(value); } catch { return undefined; }
     }
-    return value;
+    if (!Array.isArray(arr)) return arr;
+    return arr.map((item) => Object.assign(new SocialLinkDto(), item));
   })
   @IsArray()
   @ValidateNested({ each: true })

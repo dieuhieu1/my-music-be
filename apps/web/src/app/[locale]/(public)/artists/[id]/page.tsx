@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { artistApi, type ArtistProfile } from '@/lib/api/artist.api';
 import { useAuthStore } from '@/store/useAuthStore';
 import FollowButton from '@/components/profile/FollowButton';
 import PublicHeader from '@/components/layout/PublicHeader';
-import { Music2, Users, Headphones, ExternalLink, Loader2 } from 'lucide-react';
+import { Music2, Users, Headphones, ExternalLink, Loader2, ChevronLeft } from 'lucide-react';
 
 function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -24,6 +24,7 @@ const PLATFORM_ICONS: Record<string, React.ReactNode> = {
 
 export default function PublicArtistProfilePage() {
   const { locale, id } = useParams<{ locale: string; id: string }>();
+  const router         = useRouter();
   const { user }       = useAuthStore();
 
   const [artist, setArtist]   = useState<ArtistProfile | null>(null);
@@ -91,6 +92,37 @@ export default function PublicArtistProfilePage() {
 
       {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <div style={{ position: 'relative', minHeight: 480, overflow: 'hidden' }}>
+
+        {/* Back button */}
+        <button
+          type="button"
+          onClick={() => router.back()}
+          style={{
+            position: 'absolute', top: 100, left: 70, zIndex: 10,
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 14px 7px 10px',
+            background: 'rgba(13,13,13,0.55)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 20,
+            color: 'rgba(245,238,216,0.75)',
+            fontSize: '0.78rem',
+            fontFamily: 'var(--font-body)',
+            cursor: 'pointer',
+            backdropFilter: 'blur(8px)',
+            transition: 'background 0.15s, color 0.15s',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(13,13,13,0.8)';
+            e.currentTarget.style.color = 'var(--ivory)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(13,13,13,0.55)';
+            e.currentTarget.style.color = 'rgba(245,238,216,0.75)';
+          }}
+        >
+          <ChevronLeft size={15} />
+          Back
+        </button>
 
         {/* Blurred avatar background */}
         {avatarUrl ? (
