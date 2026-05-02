@@ -29,6 +29,8 @@ function ArtistModal({
   const [bio, setBio] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarInputMode, setAvatarInputMode] = useState<'file' | 'url'>('file');
+  const [avatarUrlInput, setAvatarUrlInput] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -37,6 +39,8 @@ function ArtistModal({
       setBio(initial?.bio ?? '');
       setAvatarFile(null);
       setAvatarPreview(initial?.avatarUrl ?? null);
+      setAvatarInputMode('file');
+      setAvatarUrlInput('');
     }
   }, [open, initial]);
 
@@ -58,7 +62,11 @@ function ArtistModal({
       const formData = new FormData();
       formData.append('stageName', stageName.trim());
       if (bio.trim()) formData.append('bio', bio.trim());
-      if (avatarFile) formData.append('avatar', avatarFile);
+      if (avatarInputMode === 'file' && avatarFile) {
+        formData.append('avatar', avatarFile);
+      } else if (avatarInputMode === 'url' && avatarUrlInput.trim()) {
+        formData.append('avatarUrl', avatarUrlInput.trim());
+      }
 
       if (initial) {
         await apiClient.patch(`/admin/artists/${initial.id}`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
@@ -86,55 +94,108 @@ function ArtistModal({
 
           {/* Avatar upload */}
           <div>
-            <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>
-              Artist Photo <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}>(optional · JPG, PNG, WebP · max 5 MB)</span>
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>
+                Artist Photo <span style={{ fontWeight: 400, color: 'var(--text-faint)' }}>(optional)</span>
+              </label>
+              <div style={{ display: 'flex', gap: 4, background: 'var(--surface-raised)', padding: 3, borderRadius: 6, border: '1px solid var(--border)' }}>
+                <button
+                  type="button"
+                  onClick={() => setAvatarInputMode('file')}
+                  style={{
+                    padding: '4px 10px', fontSize: 12, borderRadius: 4, cursor: 'pointer', border: 'none',
+                    background: avatarInputMode === 'file' ? 'var(--accent)' : 'transparent',
+                    color: avatarInputMode === 'file' ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 150ms'
+                  }}
+                >File</button>
+                <button
+                  type="button"
+                  onClick={() => setAvatarInputMode('url')}
+                  style={{
+                    padding: '4px 10px', fontSize: 12, borderRadius: 4, cursor: 'pointer', border: 'none',
+                    background: avatarInputMode === 'url' ? 'var(--accent)' : 'transparent',
+                    color: avatarInputMode === 'url' ? '#fff' : 'var(--text-muted)',
+                    transition: 'all 150ms'
+                  }}
+                >URL</button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
               <div
-                onClick={() => document.getElementById('avatar-input')?.click()}
+                onClick={() => avatarInputMode === 'file' && document.getElementById('avatar-input')?.click()}
                 style={{
                   width: 72, height: 72, borderRadius: '50%', overflow: 'hidden',
                   background: 'var(--bg-subtle)', border: '2px dashed var(--border-2)',
                   flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', transition: 'border-color 150ms',
+                  cursor: avatarInputMode === 'file' ? 'pointer' : 'default', transition: 'border-color 150ms',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; }}
+                onMouseEnter={(e) => { if (avatarInputMode === 'file') e.currentTarget.style.borderColor = 'var(--accent)'; }}
+                onMouseLeave={(e) => { if (avatarInputMode === 'file') e.currentTarget.style.borderColor = 'var(--border-2)'; }}
               >
                 {avatarPreview
-                  ? <img src={avatarPreview} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ? <img src={avatarPreview} onError={() => { if(avatarInputMode === 'url') setAvatarPreview(null); }} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   : <User size={28} color="var(--text-faint)" />
                 }
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <button
-                  type="button"
-                  onClick={() => document.getElementById('avatar-input')?.click()}
-                  style={{
-                    padding: '6px 12px', borderRadius: 'var(--radius-sm)',
-                    border: '1px solid var(--border-2)', background: 'var(--surface)',
-                    color: 'var(--text)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                    transition: 'all 150ms', display: 'inline-flex', alignItems: 'center', gap: 6,
-                  }}
-                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
-                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.color = 'var(--text)'; }}
-                >
-                  <Upload size={13} />
-                  {avatarPreview ? 'Change photo' : 'Upload photo'}
-                </button>
-                {avatarPreview && (
-                  <button
-                    type="button"
-                    onClick={() => { setAvatarFile(null); setAvatarPreview(null); }}
-                    style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: 12, cursor: 'pointer', padding: 0, textAlign: 'left' }}
-                  >
-                    Remove photo
-                  </button>
-                )}
-                {avatarFile && (
-                  <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
-                    {avatarFile.name} · {(avatarFile.size / 1024 / 1024).toFixed(1)} MB
-                  </span>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, marginTop: avatarInputMode === 'url' ? 0 : 8 }}>
+                {avatarInputMode === 'file' ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => document.getElementById('avatar-input')?.click()}
+                      style={{
+                        padding: '6px 12px', borderRadius: 'var(--radius-sm)', width: 'max-content',
+                        border: '1px solid var(--border-2)', background: 'var(--surface)',
+                        color: 'var(--text)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+                        transition: 'all 150ms', display: 'inline-flex', alignItems: 'center', gap: 6,
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border-2)'; e.currentTarget.style.color = 'var(--text)'; }}
+                    >
+                      <Upload size={13} />
+                      {avatarPreview ? 'Change photo' : 'Upload photo'}
+                    </button>
+                    {avatarPreview && (
+                      <button
+                        type="button"
+                        onClick={() => { setAvatarFile(null); setAvatarPreview(null); }}
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', fontSize: 12, cursor: 'pointer', padding: 0, textAlign: 'left', width: 'max-content' }}
+                      >
+                        Remove photo
+                      </button>
+                    )}
+                    {avatarFile && (
+                      <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                        {avatarFile.name} · {(avatarFile.size / 1024 / 1024).toFixed(1)} MB
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <input
+                      type="url"
+                      placeholder="https://example.com/avatar.jpg"
+                      value={avatarUrlInput}
+                      onChange={(e) => {
+                        setAvatarUrlInput(e.target.value);
+                        setAvatarPreview(e.target.value);
+                      }}
+                      disabled={loading}
+                      style={{
+                        width: '100%', height: 38, padding: '0 12px', fontSize: 13,
+                        background: 'var(--bg)', border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius)', color: 'var(--text)', outline: 'none',
+                        boxSizing: 'border-box', transition: 'border-color 150ms',
+                      }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+                    />
+                    <span style={{ fontSize: 11, color: 'var(--text-faint)' }}>
+                      Image will be verified before upload.
+                    </span>
+                  </>
                 )}
               </div>
             </div>
@@ -198,13 +259,13 @@ function ArtistModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={!stageName.trim() || loading}
+            disabled={!stageName.trim() || loading || (avatarInputMode === 'url' && !!avatarUrlInput.trim() && !avatarPreview)}
             style={{
               padding: '7px 14px', borderRadius: 'var(--radius)',
               border: 'none', background: 'var(--accent)',
               color: 'white', fontSize: 13, fontWeight: 600,
-              cursor: !stageName.trim() || loading ? 'not-allowed' : 'pointer',
-              opacity: !stageName.trim() || loading ? 0.6 : 1,
+              cursor: (!stageName.trim() || loading || (avatarInputMode === 'url' && !!avatarUrlInput.trim() && !avatarPreview)) ? 'not-allowed' : 'pointer',
+              opacity: (!stageName.trim() || loading || (avatarInputMode === 'url' && !!avatarUrlInput.trim() && !avatarPreview)) ? 0.6 : 1,
             }}
           >
             {loading ? 'Saving…' : initial ? 'Update' : 'Create'}
@@ -295,15 +356,15 @@ export default function ArtistsPage() {
 
   const COLS: Column<OfficialArtist>[] = [
     {
-      key: 'avatar', header: '', width: 48,
+      key: 'avatar', header: '', width: 72,
       render: (a) => a.avatarUrl
-        ? <img src={a.avatarUrl} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} />
+        ? <img src={a.avatarUrl} alt="" style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, flexShrink: 0, borderRadius: '50%', objectFit: 'cover' }} />
         : (
           <div style={{
-            width: 36, height: 36, borderRadius: '50%',
+            width: 48, height: 48, minWidth: 48, minHeight: 48, flexShrink: 0, borderRadius: '50%',
             background: 'linear-gradient(135deg, var(--accent), var(--purple))',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 13, fontWeight: 700, color: 'white',
+            fontSize: 16, fontWeight: 700, color: 'white',
           }}>
             {a.stageName.slice(0, 1).toUpperCase()}
           </div>

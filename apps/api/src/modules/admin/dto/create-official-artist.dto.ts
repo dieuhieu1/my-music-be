@@ -30,4 +30,8 @@ export class CreateOfficialArtistDto {
   @IsArray()
   @IsString({ each: true })
   suggestedGenres?: string[];
+
+  @IsOptional()
+  @IsUrl()
+  avatarUrl?: string;
 }

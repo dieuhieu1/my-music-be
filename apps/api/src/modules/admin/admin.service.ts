@@ -43,42 +43,42 @@ import { ReportAdminQueryDto } from '../reports/dto/report-admin-query.dto';
 import { ResolveReportDto } from '../reports/dto/resolve-report.dto';
 import { StorageService } from '../storage/storage.service';
 
-const ALLOWED_APPROVE_STATUSES  = new Set([SongStatus.PENDING]);
-const ALLOWED_REJECT_STATUSES   = new Set([SongStatus.PENDING]);
+const ALLOWED_APPROVE_STATUSES = new Set([SongStatus.PENDING]);
+const ALLOWED_REJECT_STATUSES = new Set([SongStatus.PENDING]);
 const ALLOWED_REUPLOAD_STATUSES = new Set([SongStatus.PENDING]);
-const ALLOWED_RESTORE_STATUSES  = new Set([SongStatus.TAKEN_DOWN]);
+const ALLOWED_RESTORE_STATUSES = new Set([SongStatus.TAKEN_DOWN]);
 
 const STATUS_TRANSITIONS: Partial<Record<SongStatus, Set<SongStatus>>> = {
-  [SongStatus.PENDING]:           new Set([SongStatus.LIVE, SongStatus.SCHEDULED, SongStatus.REJECTED, SongStatus.REUPLOAD_REQUIRED]),
-  [SongStatus.APPROVED]:          new Set([SongStatus.LIVE, SongStatus.SCHEDULED, SongStatus.REJECTED, SongStatus.REUPLOAD_REQUIRED]),
-  [SongStatus.LIVE]:              new Set([SongStatus.TAKEN_DOWN]),
-  [SongStatus.TAKEN_DOWN]:        new Set([SongStatus.LIVE]),
-  [SongStatus.REJECTED]:          new Set([SongStatus.LIVE, SongStatus.PENDING]),
+  [SongStatus.PENDING]: new Set([SongStatus.LIVE, SongStatus.SCHEDULED, SongStatus.REJECTED, SongStatus.REUPLOAD_REQUIRED]),
+  [SongStatus.APPROVED]: new Set([SongStatus.LIVE, SongStatus.SCHEDULED, SongStatus.REJECTED, SongStatus.REUPLOAD_REQUIRED]),
+  [SongStatus.LIVE]: new Set([SongStatus.TAKEN_DOWN]),
+  [SongStatus.TAKEN_DOWN]: new Set([SongStatus.LIVE]),
+  [SongStatus.REJECTED]: new Set([SongStatus.LIVE, SongStatus.PENDING]),
   [SongStatus.REUPLOAD_REQUIRED]: new Set([SongStatus.PENDING]),
-  [SongStatus.SCHEDULED]:         new Set([SongStatus.LIVE, SongStatus.TAKEN_DOWN]),
+  [SongStatus.SCHEDULED]: new Set([SongStatus.LIVE, SongStatus.TAKEN_DOWN]),
 };
 
 @Injectable()
 export class AdminService {
   constructor(
-    @InjectRepository(Song)            private readonly songs:           Repository<Song>,
-    @InjectRepository(ArtistProfile)   private readonly artistProfiles:  Repository<ArtistProfile>,
-    @InjectRepository(User)            private readonly users:           Repository<User>,
-    @InjectRepository(Session)         private readonly sessions:        Repository<Session>,
-    @InjectRepository(PaymentRecord)   private readonly paymentRecords:  Repository<PaymentRecord>,
-    @InjectRepository(DownloadRecord)  private readonly downloadRecords: Repository<DownloadRecord>,
-    private readonly dataSource:           DataSource,
-    private readonly auditService:         AuditService,
+    @InjectRepository(Song) private readonly songs: Repository<Song>,
+    @InjectRepository(ArtistProfile) private readonly artistProfiles: Repository<ArtistProfile>,
+    @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(Session) private readonly sessions: Repository<Session>,
+    @InjectRepository(PaymentRecord) private readonly paymentRecords: Repository<PaymentRecord>,
+    @InjectRepository(DownloadRecord) private readonly downloadRecords: Repository<DownloadRecord>,
+    private readonly dataSource: DataSource,
+    private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
-    private readonly mailService:          MailService,
-    private readonly genresService:        GenresService,
-    private readonly songsService:         SongsService,
-    private readonly dropsService:         DropsService,
-    private readonly reportsService:       ReportsService,
-    private readonly paymentsService:      PaymentsService,
-    private readonly storage:              StorageService,
+    private readonly mailService: MailService,
+    private readonly genresService: GenresService,
+    private readonly songsService: SongsService,
+    private readonly dropsService: DropsService,
+    private readonly reportsService: ReportsService,
+    private readonly paymentsService: PaymentsService,
+    private readonly storage: StorageService,
     @InjectQueue(QUEUE_NAMES.EMAIL) private readonly emailQueue: Queue,
-  ) {}
+  ) { }
 
   // ════════════════════════════════════════════════════════════════════════════
   // Phase 4B — Song approval (unchanged)
@@ -249,13 +249,14 @@ export class AdminService {
   // ════════════════════════════════════════════════════════════════════════════
 
   async listSongsAdmin(query: AdminSongQueryDto) {
-    const page   = query.page ?? 1;
-    const size   = query.size ?? 20;
+    const page = query.page ?? 1;
+    const size = query.size ?? 20;
     const status = query.status; // undefined = no filter (all statuses)
 
     const qb = this.songs
       .createQueryBuilder('s')
-      .leftJoin('artist_profiles', 'ap', 'ap.user_id = s.user_id')
+      .leftJoin('artist_profiles', 'ap', 'ap.id::text = s.artist_profile_id::text')
+      .leftJoin('users', 'u', 'u.id::text = s.user_id::text')
       .select([
         's.id',
         's.title',
@@ -265,35 +266,36 @@ export class AdminService {
         's.listenCount',
         's.coverArtUrl',
         'ap.stageName',
+        'u.name',
       ])
       .orderBy('s.createdAt', 'DESC')
       .skip((page - 1) * size)
       .take(size);
 
-    if (status)         qb.andWhere('s.status = :status',   { status });
+    if (status) qb.andWhere('s.status = :status', { status });
     if (query.artistId) qb.andWhere('s.user_id = :artistId', { artistId: query.artistId });
-    if (query.search)   qb.andWhere('s.title ILIKE :search', { search: `%${query.search}%` });
+    if (query.search) qb.andWhere('s.title ILIKE :search', { search: `%${query.search}%` });
 
     // Count query without pagination for totalItems
     const countQb = this.songs.createQueryBuilder('s');
-    if (status)         countQb.andWhere('s.status = :status',   { status });
+    if (status) countQb.andWhere('s.status = :status', { status });
     if (query.artistId) countQb.andWhere('s.user_id = :artistId', { artistId: query.artistId });
-    if (query.search)   countQb.andWhere('s.title ILIKE :search', { search: `%${query.search}%` });
+    if (query.search) countQb.andWhere('s.title ILIKE :search', { search: `%${query.search}%` });
     const totalItems = await countQb.getCount();
 
     const { entities, raw } = await qb.getRawAndEntities();
 
     const items = entities.map((s, i) => ({
-      id:          s.id,
-      title:       s.title,
-      artistName:  (raw[i] as any)?.ap_stage_name ?? null,
+      id: s.id,
+      title: s.title,
+      artistName: (raw[i] as any)?.ap_stage_name ?? (raw[i] as any)?.u_name ?? null,
       coverArtUrl: s.coverArtUrl
         ? this.storage.getPublicUrl(this.storage.getBuckets().images, s.coverArtUrl)
         : null,
-      status:      s.status,
-      createdAt:   s.createdAt,
-      dropAt:      s.dropAt,
-      totalPlays:  s.listenCount,
+      status: s.status,
+      createdAt: s.createdAt,
+      dropAt: s.dropAt,
+      totalPlays: s.listenCount,
       // energy intentionally excluded per locked decision
     }));
 
@@ -352,7 +354,7 @@ export class AdminService {
     return {
       ...this.toUserSummaryDto(user),
       failedAttempts: user.failedAttempts,
-      lockUntil:      user.lockUntil,
+      lockUntil: user.lockUntil,
       sessionCount,
       downloadCount,
     };
@@ -378,7 +380,7 @@ export class AdminService {
     // Ensure USER is always present
     const newRoles = dto.roles.includes(Role.USER) ? dto.roles : [Role.USER, ...dto.roles];
 
-    const hadPremium  = user.roles.includes(Role.PREMIUM);
+    const hadPremium = user.roles.includes(Role.PREMIUM);
     const gainPremium = newRoles.includes(Role.PREMIUM) && !hadPremium;
     const lostPremium = !newRoles.includes(Role.PREMIUM) && hadPremium;
 
@@ -391,7 +393,7 @@ export class AdminService {
 
       if (lostPremium) {
         updates.premiumExpiresAt = null;
-        updates.downloadQuota    = 0;
+        updates.downloadQuota = 0;
         // Revoke active download records
         await qr.manager
           .createQueryBuilder()
@@ -431,12 +433,12 @@ export class AdminService {
     });
 
     return items.map((s) => ({
-      id:         s.id,
+      id: s.id,
       deviceName: s.deviceName,
       deviceType: s.deviceType,
-      ip:         s.ipAddress,
+      ip: s.ipAddress,
       lastSeenAt: s.lastSeenAt,
-      createdAt:  s.createdAt,
+      createdAt: s.createdAt,
     }));
   }
 
@@ -481,26 +483,26 @@ export class AdminService {
       .skip((page - 1) * size)
       .take(size);
 
-    if (query.userId)   qb.andWhere('pr.userId    = :userId',   { userId:   query.userId });
+    if (query.userId) qb.andWhere('pr.userId    = :userId', { userId: query.userId });
     if (query.provider) qb.andWhere('pr.provider  = :provider', { provider: query.provider });
-    if (query.status)   qb.andWhere('pr.status    = :status',   { status:   query.status });
-    if (query.from)     qb.andWhere('pr.createdAt >= :from',    { from: new Date(query.from) });
-    if (query.to)       qb.andWhere('pr.createdAt <= :to',      { to:   new Date(query.to) });
+    if (query.status) qb.andWhere('pr.status    = :status', { status: query.status });
+    if (query.from) qb.andWhere('pr.createdAt >= :from', { from: new Date(query.from) });
+    if (query.to) qb.andWhere('pr.createdAt <= :to', { to: new Date(query.to) });
 
     const [items, totalItems] = await qb.getManyAndCount();
 
     return {
       items: items.map((pr) => ({
-        id:          pr.id,
-        userId:      pr.userId,
-        userEmail:   (pr.user as any)?.email ?? null,
-        provider:    pr.provider,
-        amountVnd:   pr.amountVnd,
+        id: pr.id,
+        userId: pr.userId,
+        userEmail: (pr.user as any)?.email ?? null,
+        provider: pr.provider,
+        amountVnd: pr.amountVnd,
         premiumType: pr.premiumType,
-        status:      pr.status,
+        status: pr.status,
         transactionId: pr.transactionId,
-        expiresAt:   pr.expiresAt,
-        createdAt:   pr.createdAt,
+        expiresAt: pr.expiresAt,
+        createdAt: pr.createdAt,
       })),
       totalItems,
       page,
@@ -550,9 +552,9 @@ export class AdminService {
     const monthScaffold = Array.from({ length: 6 }, (_, i) => {
       const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
       return {
-        month:     d.toLocaleString('en-US', { month: 'short' }),
+        month: d.toLocaleString('en-US', { month: 'short' }),
         yearMonth: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-        total:     0,
+        total: 0,
       };
     });
 
@@ -602,15 +604,15 @@ export class AdminService {
     monthScaffold.forEach((m) => { m.total = monthMap.get(m.yearMonth) ?? 0; });
 
     return {
-      today:       Number(t.today),
-      thisMonth:   Number(t.this_month),
-      thisYear:    Number(t.this_year),
-      allTime:     Number(t.all_time),
+      today: Number(t.today),
+      thisMonth: Number(t.this_month),
+      thisYear: Number(t.this_year),
+      allTime: Number(t.all_time),
       last6Months: monthScaffold.map(({ month, total }) => ({ month, total })),
-      byProvider:  providerRows.map((p) => ({
+      byProvider: providerRows.map((p) => ({
         provider: p.provider,
-        total:    Number(p.total),
-        count:    Number(p.cnt),
+        total: Number(p.total),
+        count: Number(p.cnt),
       })),
     };
   }
@@ -620,7 +622,7 @@ export class AdminService {
   // ════════════════════════════════════════════════════════════════════════════
 
   async createOfficialArtist(adminId: string, dto: CreateOfficialArtistDto, avatar?: Express.Multer.File) {
-    let avatarKey: string | null = null;
+    let avatarKey: string | null = dto.avatarUrl ?? null;
 
     if (avatar) {
       const allowed = ['image/jpeg', 'image/png', 'image/webp'];
@@ -635,14 +637,14 @@ export class AdminService {
     }
 
     const artist = this.artistProfiles.create({
-      userId:          null,
-      isOfficial:      true,
-      stageName:       dto.stageName,
-      bio:             dto.bio ?? null,
-      socialLinks:     dto.socialLinks ?? [],
+      userId: null,
+      isOfficial: true,
+      stageName: dto.stageName,
+      bio: dto.bio ?? null,
+      socialLinks: dto.socialLinks ?? [],
       suggestedGenres: dto.suggestedGenres ?? [],
-      coverImageUrl:   null,
-      avatarUrl:       avatarKey,
+      coverImageUrl: null,
+      avatarUrl: avatarKey,
     });
     const saved = await this.artistProfiles.save(artist);
     await this.auditService.log(adminId, 'OFFICIAL_ARTIST_CREATED', 'ARTIST', saved.id, dto.stageName);
@@ -681,9 +683,9 @@ export class AdminService {
     const artist = await this.artistProfiles.findOne({ where: { id: artistId, isOfficial: true } });
     if (!artist) throw new NotFoundException('Official artist not found');
 
-    if (dto.stageName       !== undefined) artist.stageName       = dto.stageName;
-    if (dto.bio             !== undefined) artist.bio             = dto.bio ?? null;
-    if (dto.socialLinks     !== undefined) artist.socialLinks     = dto.socialLinks ?? [];
+    if (dto.stageName !== undefined) artist.stageName = dto.stageName;
+    if (dto.bio !== undefined) artist.bio = dto.bio ?? null;
+    if (dto.socialLinks !== undefined) artist.socialLinks = dto.socialLinks ?? [];
     if (dto.suggestedGenres !== undefined) artist.suggestedGenres = dto.suggestedGenres ?? [];
 
     if (avatar) {
@@ -696,6 +698,8 @@ export class AdminService {
       const ext = avatar.mimetype === 'image/jpeg' ? 'jpg' : avatar.mimetype.split('/')[1];
       const key = `avatars/artists/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       artist.avatarUrl = await this.storage.upload(this.storage.getBuckets().images, key, avatar.buffer, avatar.mimetype);
+    } else if (dto.avatarUrl !== undefined) {
+      artist.avatarUrl = dto.avatarUrl;
     }
 
     const saved = await this.artistProfiles.save(artist);
@@ -746,38 +750,38 @@ export class AdminService {
     }>>(
       `SELECT al.id, al.action, u.email AS admin_email, al.notes, al.created_at
        FROM audit_logs al
-       LEFT JOIN users u ON u.id = al.admin_id
-       WHERE al.target_id = $1
+       LEFT JOIN users u ON u.id::text = al.admin_id::text
+       WHERE al.target_id::text = $1
        ORDER BY al.created_at DESC
        LIMIT 15`,
       [songId],
     );
 
     return {
-      id:              song.id,
-      title:           song.title,
-      status:          song.status,
+      id: song.id,
+      title: song.title,
+      status: song.status,
       coverArtUrl,
       audioUrl,
       artistName,
       artistProfileId: song.artistProfileId,
-      uploaderEmail:   uploader?.email ?? null,
-      uploaderName:    uploader?.name  ?? null,
-      bpm:             song.bpm,
-      duration:        song.duration,
-      camelotKey:      song.camelotKey,
-      genreIds:        song.genreIds ?? [],
-      dropAt:          song.dropAt,
-      totalPlays:      song.listenCount,
-      createdAt:       song.createdAt,
+      uploaderEmail: uploader?.email ?? null,
+      uploaderName: uploader?.name ?? null,
+      bpm: song.bpm,
+      duration: song.duration,
+      camelotKey: song.camelotKey,
+      genreIds: song.genreIds ?? [],
+      dropAt: song.dropAt,
+      totalPlays: song.listenCount,
+      createdAt: song.createdAt,
       rejectionReason: song.rejectionReason,
-      reuploadReason:  song.reuploadReason,
-      statusHistory:   auditRows.map((r) => ({
-        id:         r.id,
-        action:     r.action,
+      reuploadReason: song.reuploadReason,
+      statusHistory: auditRows.map((r) => ({
+        id: r.id,
+        action: r.action,
         adminEmail: r.admin_email,
-        notes:      r.notes,
-        createdAt:  r.created_at,
+        notes: r.notes,
+        createdAt: r.created_at,
       })),
     };
   }
@@ -877,6 +881,28 @@ export class AdminService {
     return result;
   }
 
+  // ── Update song genres (admin inline picker) ──────────────────────────────
+
+  async updateSongGenres(songId: string, genreIds: string[]): Promise<{ id: string; genreIds: string[] }> {
+    const song = await this.findSongOrThrow(songId);
+
+    if (!genreIds || genreIds.length === 0) {
+      throw new BadRequestException('At least one genre ID is required');
+    }
+
+    // Validate all provided IDs exist in the genres table via GenresService
+    const allGenres = await this.genresService.findAll();
+    const validIds = new Set(allGenres.map((g) => g.id));
+    const invalid = genreIds.filter((id) => !validIds.has(id));
+    if (invalid.length > 0) {
+      throw new BadRequestException(`Unknown genre IDs: ${invalid.join(', ')}`);
+    }
+
+    song.genreIds = genreIds;
+    const saved = await this.songs.save(song);
+    return { id: saved.id, genreIds: saved.genreIds };
+  }
+
   // ════════════════════════════════════════════════════════════════════════════
   // Private helpers
   // ════════════════════════════════════════════════════════════════════════════
@@ -889,33 +915,33 @@ export class AdminService {
 
   private toArtistDto(a: ArtistProfile) {
     return {
-      id:              a.id,
-      stageName:       a.stageName,
-      bio:             a.bio,
-      coverImageUrl:   a.coverImageUrl
+      id: a.id,
+      stageName: a.stageName,
+      bio: a.bio,
+      coverImageUrl: a.coverImageUrl
         ? this.storage.getPublicUrl(this.storage.getBuckets().images, a.coverImageUrl)
         : null,
-      avatarUrl:       a.avatarUrl
+      avatarUrl: a.avatarUrl
         ? this.storage.getPublicUrl(this.storage.getBuckets().images, a.avatarUrl)
         : null,
-      socialLinks:     a.socialLinks ?? [],
+      socialLinks: a.socialLinks ?? [],
       suggestedGenres: a.suggestedGenres ?? [],
-      followerCount:   a.followerCount,
-      listenerCount:   a.listenerCount,
-      isOfficial:      a.isOfficial,
-      createdAt:       a.createdAt,
+      followerCount: a.followerCount,
+      listenerCount: a.listenerCount,
+      isOfficial: a.isOfficial,
+      createdAt: a.createdAt,
     };
   }
 
   private toUserSummaryDto(u: User) {
     return {
-      id:               u.id,
-      email:            u.email,
-      name:             u.name,
-      roles:            u.roles,
-      isPremium:        u.isPremium,
+      id: u.id,
+      email: u.email,
+      name: u.name,
+      roles: u.roles,
+      isPremium: u.isPremium,
       premiumExpiresAt: u.premiumExpiresAt,
-      createdAt:        u.createdAt,
+      createdAt: u.createdAt,
     };
   }
 }

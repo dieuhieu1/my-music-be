@@ -532,7 +532,7 @@ export class SongsService {
     const songId = uuidv4();
     const audioObjectName = `audio/songs/${adminId}/${songId}`;
     const encObjectName   = `audio/songs/${adminId}/${songId}.enc`;
-    let coverArtObjectName: string | null = null;
+    let coverArtObjectName: string | null = dto.coverArtUrl ?? null;
 
     await Promise.all([
       this.storage.upload(this.storage.getBuckets().audio, audioObjectName, strippedBuffer, detectedMime),
@@ -540,14 +540,15 @@ export class SongsService {
     ]);
 
     if (coverArtFile) {
-      coverArtObjectName = `songs/${adminId}/${songId}-cover`;
+      const uploadObjectName = `songs/${adminId}/${songId}-cover`;
       try {
         await this.storage.upload(
           this.storage.getBuckets().images,
-          coverArtObjectName,
+          uploadObjectName,
           coverArtFile.buffer,
           coverArtFile.mimetype,
         );
+        coverArtObjectName = uploadObjectName;
       } catch {
         coverArtObjectName = null;
       }

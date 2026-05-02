@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Music2, Search, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
@@ -160,6 +161,7 @@ function RowActions({ song, onAction }: {
 // ── Page ──────────────────────────────────────────────────────────────────
 
 export default function SongsPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const { toast } = useToast();
 
@@ -170,7 +172,6 @@ export default function SongsPage() {
   const size = 20;
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [expandedId,  setExpandedId]  = useState<string | null>(null);
   const [dialog, setDialog] = useState<{
     type: string;
     song?: AdminSong;
@@ -269,16 +270,16 @@ export default function SongsPage() {
     setDialog(null);
   }
 
-  function toggleExpand(song: AdminSong) {
-    setExpandedId((prev) => (prev === song.id ? null : song.id));
+  function handleRowClick(song: AdminSong) {
+    router.push(`/songs/${song.id}`);
   }
 
   const COLS: Column<AdminSong>[] = [
     {
-      key: 'cover', header: 'Cover', width: 52,
+      key: 'cover', header: 'Cover', width: 72,
       render: (s) => s.coverArtUrl
-        ? <img src={s.coverArtUrl} alt="" style={{ width: 40, height: 40, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }} />
-        : <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-sm)', background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Music2 size={16} color="var(--text-faint)" /></div>,
+        ? <img src={s.coverArtUrl} alt="" style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, flexShrink: 0, borderRadius: 'var(--radius-sm)', objectFit: 'cover' }} />
+        : <div style={{ width: 48, height: 48, minWidth: 48, minHeight: 48, flexShrink: 0, borderRadius: 'var(--radius-sm)', background: 'var(--bg-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Music2 size={20} color="var(--text-faint)" /></div>,
     },
     {
       key: 'title', header: 'Title', width: 'auto',
@@ -430,9 +431,7 @@ export default function SongsPage() {
         size={size}
         totalItems={data?.totalItems ?? 0}
         onPageChange={setPage}
-        onRowClick={toggleExpand}
-        expandedRowId={expandedId ?? undefined}
-        renderExpanded={(s) => <ExpandedRow song={s} />}
+        onRowClick={handleRowClick}
       />
 
       {/* Reject / Reupload / Bulk reject / Bulk reupload dialog */}

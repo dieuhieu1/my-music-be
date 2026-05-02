@@ -1,5 +1,5 @@
 import {
-  IsString, MaxLength, IsOptional, IsArray, IsNumber, IsDateString, IsUUID,
+  IsString, MaxLength, IsOptional, IsArray, IsNumber, IsDateString, IsUUID, IsUrl,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -30,4 +30,8 @@ export class AdminUploadSongDto {
   @IsOptional()
   @IsDateString()
   dropAt?: string;
+
+  @IsOptional()
+  @IsUrl()
+  coverArtUrl?: string;
 }

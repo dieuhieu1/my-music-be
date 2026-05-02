@@ -23,32 +23,36 @@ export function DialogContent({
       <RadixDialog.Content style={{
         position: 'fixed', left: 'calc(50% + 120px)', top: '50%', zIndex: 51,
         transform: 'translate(-50%,-50%)', width: '100%', maxWidth: 420,
-        background: 'var(--surface)', border: '1px solid var(--border-2)',
-        borderRadius: 12, padding: 24, outline: 'none',
-      }} className="anim-fade-up">
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
-          <div>
-            <RadixDialog.Title style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
-              {title}
-            </RadixDialog.Title>
-            {description && (
-              <RadixDialog.Description style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-                {description}
-              </RadixDialog.Description>
-            )}
+        outline: 'none',
+      }}>
+        <div className="anim-fade-up" style={{
+          background: 'var(--surface)', border: '1px solid var(--border-2)',
+          borderRadius: 12, padding: 24,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
+            <div>
+              <RadixDialog.Title style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 4 }}>
+                {title}
+              </RadixDialog.Title>
+              {description && (
+                <RadixDialog.Description style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                  {description}
+                </RadixDialog.Description>
+              )}
+            </div>
+            <RadixDialog.Close style={{
+              background: 'none', border: 'none', color: 'var(--text-faint)',
+              cursor: 'pointer', padding: 4, borderRadius: 4,
+              transition: 'color 150ms',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; }}
+            >
+              <X size={15} />
+            </RadixDialog.Close>
           </div>
-          <RadixDialog.Close style={{
-            background: 'none', border: 'none', color: 'var(--text-faint)',
-            cursor: 'pointer', padding: 4, borderRadius: 4,
-            transition: 'color 150ms',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; }}
-          >
-            <X size={15} />
-          </RadixDialog.Close>
+          {children}
         </div>
-        {children}
       </RadixDialog.Content>
     </RadixDialog.Portal>
   );

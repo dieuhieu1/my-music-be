@@ -61,6 +61,9 @@ export class StorageService implements OnModuleInit {
 
   // Direct public URL — requires the images bucket to have a public-read bucket policy.
   getPublicUrl(bucket: string, key: string): string {
+    if (key.startsWith('http://') || key.startsWith('https://')) {
+      return key;
+    }
     return `https://${bucket}.s3.${this.region}.amazonaws.com/${key}`;
   }
 

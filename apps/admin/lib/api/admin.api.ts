@@ -195,6 +195,9 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
+  updateSongGenres: (id: string, genreIds: string[]) =>
+    apiClient.patch(`/admin/songs/${id}/genres`, { genreIds }),
+
   // ── Official Artists ──────────────────────────────────────────────────────
 
   getOfficialArtists: (params?: { search?: string; page?: number; size?: number }) =>

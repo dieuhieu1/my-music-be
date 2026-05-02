@@ -47,7 +47,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   // ════════════════════════════════════════════════════════════════════════════
   // Phase 4B — Song approval queue (preserved)
@@ -115,6 +115,16 @@ export class AdminController {
     return this.adminService.updateSongStatus(adminId, songId, dto);
   }
 
+  // ── Update song genres ────────────────────────────────────────────────────
+  @Patch('songs/:id/genres')
+  @HttpCode(HttpStatus.OK)
+  updateSongGenres(
+    @Param('id', ParseUUIDPipe) songId: string,
+    @Body() dto: { genreIds: string[] },
+  ) {
+    return this.adminService.updateSongGenres(songId, dto.genreIds);
+  }
+
   // ── Admin song upload (bypasses PENDING, goes LIVE) ───────────────────────
   @Post('songs/upload')
   @HttpCode(HttpStatus.CREATED)
@@ -146,15 +156,15 @@ export class AdminController {
   // ── Phase 4B audit endpoint (kept, uses old limit param) ──────────────────
   @Get('audit-logs')
   getAuditLogs(
-    @Query('page')    page?:    string,
-    @Query('limit')   limit?:   string,
-    @Query('action')  action?:  string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('action') action?: string,
     @Query('adminId') adminId?: string,
-    @Query('from')    from?:    string,
-    @Query('to')      to?:      string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     return this.auditService.findAll({
-      page:  page  ? parseInt(page,  10) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
       action,
       adminId,
@@ -195,17 +205,17 @@ export class AdminController {
 
   @Get('audit')
   getAuditLogsPaginated(
-    @Query('page')       page?:       string,
-    @Query('size')       size?:       string,
-    @Query('action')     action?:     string,
-    @Query('adminId')    adminId?:    string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('action') action?: string,
+    @Query('adminId') adminId?: string,
     @Query('targetType') targetType?: string,
-    @Query('from')       from?:       string,
-    @Query('to')         to?:         string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     return this.adminService.getAuditLogs({
-      page:       page       ? parseInt(page,  10) : undefined,
-      size:       size       ? parseInt(size,  10) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      size: size ? parseInt(size, 10) : undefined,
       action,
       adminId,
       targetType,
@@ -246,7 +256,7 @@ export class AdminController {
   @Delete('users/:userId/sessions/:sessionId')
   @HttpCode(HttpStatus.NO_CONTENT)
   deleteUserSession(
-    @Param('userId',    ParseUUIDPipe) userId:    string,
+    @Param('userId', ParseUUIDPipe) userId: string,
     @Param('sessionId', ParseUUIDPipe) sessionId: string,
   ) {
     return this.adminService.deleteUserSession(userId, sessionId);

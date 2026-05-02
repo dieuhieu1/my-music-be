@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Music2, Play, Pause } from 'lucide-react';
@@ -131,10 +131,28 @@ export default function SongDetailPage() {
   const [statusDialog, setStatusDialog] = useState<{ target: SongStatus } | null>(null);
   const [reason, setReason] = useState('');
 
+  // ── Genre editor state ─────────────────────────────────────────────────────
+  const [editingGenres, setEditingGenres] = useState(false);
+  const [selectedGenreIds, setSelectedGenreIds] = useState<string[]>([]);
+  const [savingGenres, setSavingGenres] = useState(false);
+
   const { data: song, isLoading, error } = useQuery({
     queryKey: ['admin', 'song', id],
     queryFn: () => adminApi.getSongDetail(id).then((r) => r.data),
   });
+
+  // ── Genre list (public endpoint, long cache) ───────────────────────────────
+  const { data: genreList } = useQuery({
+    queryKey: ['genres'],
+    queryFn: () => adminApi.getGenres().then((r) => r.data),
+    staleTime: 60 * 60 * 1000,
+  });
+
+  // ── Sync selected IDs when song or genre list loads ────────────────────────
+  useEffect(() => {
+    if (!song) return;
+    setSelectedGenreIds(song.genreIds ?? []);
+  }, [song?.id]);
 
   const statusMut = useMutation({
     mutationFn: ({ status, reason }: { status: SongStatus; reason?: string }) =>
@@ -286,6 +304,171 @@ export default function SongDetailPage() {
                 <MetaBlock label="Reupload Notes">
                   <p style={{ fontSize: 13, color: 'var(--warning)', margin: 0 }}>{song.reuploadReason}</p>
                 </MetaBlock>
+              )}
+            </div>
+
+            {/* ── Genres (inline editable) ───────────────────────────── */}
+            <div style={{ marginTop: 20 }}>
+
+              {/* Label row */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 8,
+              }}>
+                <p style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: 'var(--text-faint)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.07em',
+                  margin: 0,
+                }}>
+                  Genres
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingGenres) {
+                      // Cancel — reset to original
+                      setSelectedGenreIds(song.genreIds ?? []);
+                    }
+                    setEditingGenres(!editingGenres);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: editingGenres ? 'var(--text-muted)' : 'var(--accent)',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  {editingGenres ? 'Cancel' : 'Edit'}
+                </button>
+              </div>
+
+              {editingGenres ? (
+                <div>
+                  {/* Selectable chips */}
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 6,
+                    marginBottom: 10,
+                  }}>
+                    {genreList?.map(genre => {
+                      const selected = selectedGenreIds.includes(genre.id);
+                      return (
+                        <button
+                          key={genre.id}
+                          type="button"
+                          onClick={() =>
+                            setSelectedGenreIds(prev =>
+                              selected
+                                ? prev.filter(gid => gid !== genre.id)
+                                : [...prev, genre.id]
+                            )
+                          }
+                          style={{
+                            padding: '4px 12px',
+                            borderRadius: 9999,
+                            border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                            background: selected ? 'var(--accent-light)' : 'var(--surface-2)',
+                            color: selected ? 'var(--accent)' : 'var(--text-muted)',
+                            fontSize: 12,
+                            fontWeight: selected ? 600 : 400,
+                            cursor: 'pointer',
+                            transition: 'all 150ms',
+                          }}
+                        >
+                          {genre.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Save button */}
+                  <button
+                    type="button"
+                    disabled={selectedGenreIds.length === 0 || savingGenres}
+                    onClick={async () => {
+                      if (selectedGenreIds.length === 0) return;
+                      setSavingGenres(true);
+                      try {
+                        await adminApi.updateSongGenres(id, selectedGenreIds);
+                        toast('Genres updated.', 'success');
+                        setEditingGenres(false);
+                        qc.invalidateQueries({ queryKey: ['admin', 'song', id] });
+                      } catch (err: any) {
+                        toast(
+                          err?.response?.data?.message ?? 'Failed to update genres.',
+                          'error',
+                        );
+                      } finally {
+                        setSavingGenres(false);
+                      }
+                    }}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: 'var(--radius-sm)',
+                      background: selectedGenreIds.length === 0 ? 'var(--border)' : 'var(--accent)',
+                      color: 'white',
+                      border: 'none',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: selectedGenreIds.length === 0 ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      transition: 'background 150ms',
+                    }}
+                  >
+                    {savingGenres ? 'Saving…' : `Save (${selectedGenreIds.length})`}
+                  </button>
+
+                  {selectedGenreIds.length === 0 && (
+                    <p style={{
+                      fontSize: 11,
+                      color: 'var(--danger)',
+                      marginTop: 6,
+                      marginBottom: 0,
+                    }}>
+                      Select at least 1 genre
+                    </p>
+                  )}
+                </div>
+
+              ) : (
+                /* Read-only display */
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {genreList && song.genreIds?.length
+                    ? genreList
+                        .filter(g => song.genreIds.includes(g.id))
+                        .map(g => (
+                          <span key={g.id} style={{
+                            padding: '3px 10px',
+                            borderRadius: 9999,
+                            background: 'var(--accent-light)',
+                            color: 'var(--accent)',
+                            border: '1px solid #A5B4FC',
+                            fontSize: 12,
+                            fontWeight: 500,
+                          }}>
+                            {g.name}
+                          </span>
+                        ))
+                    : <span style={{
+                        fontSize: 13,
+                        color: 'var(--text-faint)',
+                        fontStyle: 'italic',
+                      }}>
+                        No genres assigned
+                      </span>
+                  }
+                </div>
               )}
             </div>
           </div>
