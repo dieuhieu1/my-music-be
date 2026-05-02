@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard, Music, Tag, Users, Flag,
-  TrendingUp, CreditCard, ScrollText, Music2, LogOut,
+  TrendingUp, CreditCard, ScrollText, Music2, LogOut, Star,
   type LucideIcon,
 } from 'lucide-react';
 import { adminApi, type Paginated, type AdminSong, type Report, type GenreSuggestion } from '@/lib/api/admin.api';
@@ -37,8 +37,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'CONTENT',
     items: [
-      { label: 'Songs',  href: '/songs',  icon: Music, badge: 'songs' },
-      { label: 'Genres', href: '/genres', icon: Tag,   badge: 'genres' },
+      { label: 'Songs',            href: '/songs',   icon: Music, badge: 'songs' },
+      { label: 'Official Artists', href: '/artists', icon: Star },
+      { label: 'Genres',           href: '/genres',  icon: Tag,   badge: 'genres' },
     ],
   },
   {

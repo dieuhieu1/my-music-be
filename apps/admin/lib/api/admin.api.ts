@@ -85,12 +85,57 @@ export interface RevenueSummary {
 export interface AuditLog {
   id: string;
   adminId: string;
-  adminEmail: string;
+  adminEmail: string | null;
   action: string;
   targetId: string | null;
   targetType: string | null;
   notes: string | null;
   createdAt: string;
+}
+
+export interface OfficialArtist {
+  id: string;
+  stageName: string;
+  bio: string | null;
+  coverImageUrl: string | null;
+  avatarUrl: string | null;
+  socialLinks: { platform: string; url: string }[];
+  suggestedGenres: string[];
+  followerCount: number;
+  listenerCount: number;
+  isOfficial: boolean;
+  createdAt: string;
+  songCount?: number;
+}
+
+export interface SongStatusHistoryEntry {
+  id: string;
+  action: string;
+  adminEmail: string | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+export interface AdminSongDetail {
+  id: string;
+  title: string;
+  status: SongStatus;
+  coverArtUrl: string | null;
+  audioUrl: string | null;
+  artistName: string | null;
+  artistProfileId: string | null;
+  uploaderEmail: string | null;
+  uploaderName: string | null;
+  bpm: number | null;
+  duration: number | null;
+  camelotKey: string | null;
+  genreIds: string[];
+  dropAt: string | null;
+  totalPlays: number;
+  createdAt: string;
+  rejectionReason: string | null;
+  reuploadReason: string | null;
+  statusHistory: SongStatusHistoryEntry[];
 }
 
 export interface PaymentRecord {
@@ -138,6 +183,42 @@ export const adminApi = {
 
   takedownSong: (id: string) =>
     apiClient.patch(`/admin/songs/${id}/takedown`),
+
+  getSongDetail: (id: string) =>
+    apiClient.get<AdminSongDetail>(`/admin/songs/${id}`),
+
+  updateSongStatus: (id: string, status: SongStatus, reason?: string) =>
+    apiClient.patch(`/admin/songs/${id}/status`, { status, reason }),
+
+  uploadSong: (formData: FormData) =>
+    apiClient.post('/admin/songs/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  // ── Official Artists ──────────────────────────────────────────────────────
+
+  getOfficialArtists: (params?: { search?: string; page?: number; size?: number }) =>
+    apiClient.get<Paginated<OfficialArtist>>('/admin/artists', { params }),
+
+  getOfficialArtist: (id: string) =>
+    apiClient.get<OfficialArtist & { songCount: number }>(`/admin/artists/${id}`),
+
+  createOfficialArtist: (dto: {
+    stageName: string;
+    bio?: string;
+    socialLinks?: { platform: string; url: string }[];
+    suggestedGenres?: string[];
+  }) => apiClient.post<OfficialArtist>('/admin/artists', dto),
+
+  updateOfficialArtist: (id: string, dto: {
+    stageName?: string;
+    bio?: string;
+    socialLinks?: { platform: string; url: string }[];
+    suggestedGenres?: string[];
+  }) => apiClient.patch<OfficialArtist>(`/admin/artists/${id}`, dto),
+
+  deleteOfficialArtist: (id: string) =>
+    apiClient.delete(`/admin/artists/${id}`),
 
   // ── Users ────────────────────────────────────────────────────────────────
 
@@ -200,6 +281,7 @@ export const adminApi = {
   getAuditLogs: (params?: {
     action?: string;
     adminId?: string;
+    targetType?: string;
     from?: string;
     to?: string;
     page?: number;

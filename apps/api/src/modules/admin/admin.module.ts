@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 
 import { Song } from '../songs/entities/song.entity';
+import { ArtistProfile } from '../auth/entities/artist-profile.entity';
 import { User } from '../auth/entities/user.entity';
 import { Session } from '../auth/entities/session.entity';
 import { PaymentRecord } from '../payments/entities/payment-record.entity';
@@ -21,7 +22,7 @@ import { QUEUE_NAMES } from '../queue/queue.constants';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Song, User, Session, PaymentRecord, DownloadRecord]),
+    TypeOrmModule.forFeature([Song, ArtistProfile, User, Session, PaymentRecord, DownloadRecord]),
     BullModule.registerQueue({ name: QUEUE_NAMES.EMAIL }),
     AuditModule,
     NotificationsModule,

@@ -21,7 +21,7 @@ export function DialogContent({
         background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
       }} />
       <RadixDialog.Content style={{
-        position: 'fixed', left: '50%', top: '50%', zIndex: 51,
+        position: 'fixed', left: 'calc(50% + 120px)', top: '50%', zIndex: 51,
         transform: 'translate(-50%,-50%)', width: '100%', maxWidth: 420,
         background: 'var(--surface)', border: '1px solid var(--border-2)',
         borderRadius: 12, padding: 24, outline: 'none',

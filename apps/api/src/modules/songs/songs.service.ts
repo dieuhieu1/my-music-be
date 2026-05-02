@@ -26,6 +26,7 @@ import { UploadSongDto } from './dto/upload-song.dto';
 import { UpdateSongDto } from './dto/update-song.dto';
 import { ResubmitSongDto } from './dto/resubmit-song.dto';
 import { BrowseSongsDto } from './dto/browse-songs.dto';
+import { AdminUploadSongDto } from './dto/admin-upload-song.dto';
 import { SongStatus } from '../../common/enums';
 
 // ── Audio magic-byte helpers ─────────────────────────────────────────────────
@@ -506,6 +507,92 @@ export class SongsService {
     song.reuploadReason = null;
 
     await this.songs.save(song);
+    return this.buildSongResponse(song);
+  }
+
+  // ── Admin: bypass-queue upload (goes LIVE / SCHEDULED directly) ──────────
+
+  async adminUploadSong(
+    adminId: string,
+    dto: AdminUploadSongDto,
+    audioFile: Express.Multer.File,
+    coverArtFile?: Express.Multer.File,
+  ) {
+    const detectedMime = detectAudioMagicBytes(audioFile.buffer);
+    if (!detectedMime) {
+      throw new BadRequestException(
+        'Invalid audio file: magic bytes do not match a supported audio format (MP3, FLAC, WAV).',
+      );
+    }
+
+    const strippedBuffer =
+      detectedMime === 'audio/mpeg' ? stripId3v2Header(audioFile.buffer) : audioFile.buffer;
+    const { encrypted, aesKey, iv } = encryptAes256Cbc(strippedBuffer);
+
+    const songId = uuidv4();
+    const audioObjectName = `audio/songs/${adminId}/${songId}`;
+    const encObjectName   = `audio/songs/${adminId}/${songId}.enc`;
+    let coverArtObjectName: string | null = null;
+
+    await Promise.all([
+      this.storage.upload(this.storage.getBuckets().audio, audioObjectName, strippedBuffer, detectedMime),
+      this.storage.upload(this.storage.getBuckets().audio, encObjectName, encrypted, 'application/octet-stream'),
+    ]);
+
+    if (coverArtFile) {
+      coverArtObjectName = `songs/${adminId}/${songId}-cover`;
+      try {
+        await this.storage.upload(
+          this.storage.getBuckets().images,
+          coverArtObjectName,
+          coverArtFile.buffer,
+          coverArtFile.mimetype,
+        );
+      } catch {
+        coverArtObjectName = null;
+      }
+    }
+
+    const dropAt = dto.dropAt ? new Date(dto.dropAt) : null;
+    const status = dropAt && dropAt > new Date() ? SongStatus.SCHEDULED : SongStatus.LIVE;
+
+    const song = await this.dataSource.transaction(async (manager) => {
+      const newSong = manager.create(Song, {
+        id:               songId,
+        userId:           adminId,
+        title:            dto.title,
+        fileUrl:          audioObjectName,
+        encryptedFileUrl: encObjectName,
+        coverArtUrl:      coverArtObjectName,
+        genreIds:         dto.genreIds ?? [],
+        bpm:              dto.bpm ?? null,
+        camelotKey:       dto.camelotKey ?? null,
+        dropAt,
+        artistProfileId:  dto.artistProfileId ?? null,
+        status,
+      });
+      const savedSong = await manager.save(newSong);
+
+      const encKey = manager.create(SongEncryptionKey, { songId, aesKey, iv });
+      await manager.save(encKey);
+
+      return savedSong;
+    }).catch(async (err) => {
+      this.logger.error(`Admin upload transaction failed for songId=${songId}: ${err.message}`);
+      await Promise.allSettled([
+        this.storage.deleteObject(this.storage.getBuckets().audio, audioObjectName),
+        this.storage.deleteObject(this.storage.getBuckets().audio, encObjectName),
+        coverArtObjectName
+          ? this.storage.deleteObject(this.storage.getBuckets().images, coverArtObjectName)
+          : Promise.resolve(),
+      ]);
+      throw err;
+    });
+
+    await this.audioExtractionQueue.add('extract', { songId: song.id }).catch((err) => {
+      this.logger.error(`Failed to enqueue audio extraction for songId=${song.id}: ${err.message}`);
+    });
+
     return this.buildSongResponse(song);
   }
 

@@ -20,6 +20,9 @@ export class Song {
   @Column({ name: 'user_id' })
   userId: string;
 
+  @Column({ name: 'artist_profile_id', nullable: true })
+  artistProfileId: string | null;
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;

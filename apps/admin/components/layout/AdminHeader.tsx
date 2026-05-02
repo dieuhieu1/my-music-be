@@ -3,7 +3,7 @@
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, Music, Tag, Users, Flag,
-  TrendingUp, CreditCard, ScrollText,
+  TrendingUp, CreditCard, ScrollText, Star,
   type LucideIcon,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
@@ -18,14 +18,15 @@ interface PageConfig {
 }
 
 const PAGE_CONFIG: Record<string, PageConfig> = {
-  '/dashboard': { title: 'Dashboard',  subtitle: 'Overview & analytics',   Icon: LayoutDashboard },
-  '/songs':     { title: 'Songs',      subtitle: 'Content moderation',     Icon: Music },
-  '/genres':    { title: 'Genres',     subtitle: 'Taxonomy management',    Icon: Tag },
-  '/users':     { title: 'Users',      subtitle: 'Account management',     Icon: Users },
-  '/reports':   { title: 'Reports',    subtitle: 'Community moderation',   Icon: Flag },
-  '/audit':     { title: 'Audit Log',  subtitle: 'Activity history',       Icon: ScrollText },
-  '/payments':  { title: 'Payments',   subtitle: 'Transaction records',    Icon: CreditCard },
-  '/revenue':   { title: 'Revenue',    subtitle: 'Financial analytics',    Icon: TrendingUp },
+  '/dashboard': { title: 'Dashboard',        subtitle: 'Overview & analytics',   Icon: LayoutDashboard },
+  '/songs':     { title: 'Songs',            subtitle: 'Content moderation',     Icon: Music },
+  '/artists':   { title: 'Official Artists', subtitle: 'Artist management',      Icon: Star },
+  '/genres':    { title: 'Genres',           subtitle: 'Taxonomy management',    Icon: Tag },
+  '/users':     { title: 'Users',            subtitle: 'Account management',     Icon: Users },
+  '/reports':   { title: 'Reports',          subtitle: 'Community moderation',   Icon: Flag },
+  '/audit':     { title: 'Audit Log',        subtitle: 'Activity history',       Icon: ScrollText },
+  '/payments':  { title: 'Payments',         subtitle: 'Transaction records',    Icon: CreditCard },
+  '/revenue':   { title: 'Revenue',          subtitle: 'Financial analytics',    Icon: TrendingUp },
 };
 
 // ── AdminHeader ────────────────────────────────────────────────────────────

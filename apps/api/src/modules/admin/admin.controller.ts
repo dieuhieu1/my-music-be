@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -10,8 +11,13 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileFieldsInterceptor, FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { AdminService } from './admin.service';
 import { RejectSongDto } from './dto/reject-song.dto';
 import { ReuploadRequiredDto } from './dto/reupload-required.dto';
@@ -22,6 +28,10 @@ import { AdminPaymentQueryDto } from './dto/admin-payment-query.dto';
 import { AdminSongQueryDto } from './dto/admin-song-query.dto';
 import { AdminGrantPremiumDto } from './dto/admin-grant-premium.dto';
 import { AdminRevokePremiumDto } from './dto/admin-revoke-premium.dto';
+import { CreateOfficialArtistDto } from './dto/create-official-artist.dto';
+import { UpdateOfficialArtistDto } from './dto/update-official-artist.dto';
+import { UpdateSongStatusDto } from './dto/update-song-status.dto';
+import { AdminUploadSongDto } from '../songs/dto/admin-upload-song.dto';
 import { ReportAdminQueryDto } from '../reports/dto/report-admin-query.dto';
 import { ResolveReportDto } from '../reports/dto/resolve-report.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -86,6 +96,51 @@ export class AdminController {
   @Get('songs')
   listSongs(@Query() query: AdminSongQueryDto) {
     return this.adminService.listSongsAdmin(query);
+  }
+
+  // ── Song detail ───────────────────────────────────────────────────────────
+  @Get('songs/:id')
+  getSongDetail(@Param('id', ParseUUIDPipe) songId: string) {
+    return this.adminService.getAdminSongDetail(songId);
+  }
+
+  // ── Flexible status update (replaces separate approve/reject/restore/takedown) ──
+  @Patch('songs/:id/status')
+  @HttpCode(HttpStatus.OK)
+  updateSongStatus(
+    @CurrentUser('id') adminId: string,
+    @Param('id', ParseUUIDPipe) songId: string,
+    @Body() dto: UpdateSongStatusDto,
+  ) {
+    return this.adminService.updateSongStatus(adminId, songId, dto);
+  }
+
+  // ── Admin song upload (bypasses PENDING, goes LIVE) ───────────────────────
+  @Post('songs/upload')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'audio', maxCount: 1 },
+        { name: 'coverArt', maxCount: 1 },
+      ],
+      {
+        storage: memoryStorage(),
+        limits: { fileSize: 200 * 1024 * 1024 }, // 200 MB
+        fileFilter: (_, file, cb) => {
+          const allowed = /^(audio\/(mpeg|flac|wav|x-wav|x-flac)|image\/(jpeg|jpg|png|webp))$/;
+          cb(allowed.test(file.mimetype) ? null : new BadRequestException(`Unsupported file type: ${file.mimetype}`), allowed.test(file.mimetype));
+        },
+      },
+    ),
+  )
+  uploadSong(
+    @CurrentUser('id') adminId: string,
+    @Body() dto: AdminUploadSongDto,
+    @UploadedFiles() files: { audio?: Express.Multer.File[]; coverArt?: Express.Multer.File[] },
+  ) {
+    if (!files?.audio?.[0]) throw new BadRequestException('Audio file is required');
+    return this.adminService.adminUploadSong(adminId, dto, files.audio[0], files.coverArt?.[0]);
   }
 
   // ── Phase 4B audit endpoint (kept, uses old limit param) ──────────────────
@@ -256,6 +311,60 @@ export class AdminController {
     @Body() dto: ResolveReportDto,
   ) {
     return this.adminService.takedownReport(adminId, reportId, dto);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Official Artist Management
+  // ════════════════════════════════════════════════════════════════════════════
+
+  @Post('artists')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(FileInterceptor('avatar', { storage: memoryStorage() }))
+  createOfficialArtist(
+    @CurrentUser('id') adminId: string,
+    @Body() dto: CreateOfficialArtistDto,
+    @UploadedFile() avatar?: Express.Multer.File,
+  ) {
+    return this.adminService.createOfficialArtist(adminId, dto, avatar);
+  }
+
+  @Get('artists')
+  listOfficialArtists(
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.listOfficialArtists(
+      page ? parseInt(page, 10) : 1,
+      size ? parseInt(size, 10) : 20,
+      search,
+    );
+  }
+
+  @Get('artists/:id')
+  getOfficialArtistDetail(@Param('id', ParseUUIDPipe) artistId: string) {
+    return this.adminService.getOfficialArtistDetail(artistId);
+  }
+
+  @Patch('artists/:id')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(FileInterceptor('avatar', { storage: memoryStorage() }))
+  updateOfficialArtist(
+    @CurrentUser('id') adminId: string,
+    @Param('id', ParseUUIDPipe) artistId: string,
+    @Body() dto: UpdateOfficialArtistDto,
+    @UploadedFile() avatar?: Express.Multer.File,
+  ) {
+    return this.adminService.updateOfficialArtist(adminId, artistId, dto, avatar);
+  }
+
+  @Delete('artists/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deleteOfficialArtist(
+    @CurrentUser('id') adminId: string,
+    @Param('id', ParseUUIDPipe) artistId: string,
+  ) {
+    return this.adminService.deleteOfficialArtist(adminId, artistId);
   }
 
   // ════════════════════════════════════════════════════════════════════════════

@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Music2, Search, CheckCircle2 } from 'lucide-react';
 import { format } from 'date-fns';
-import { adminApi, type AdminSong } from '@/lib/api/admin.api';
+import { adminApi, type AdminSong, type SongStatus } from '@/lib/api/admin.api';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { StatusTabs } from '@/components/ui/StatusTabs';
@@ -69,7 +70,7 @@ function ExpandedRow({ song }: { song: AdminSong }) {
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{s.camelotKey ?? '—'}</span>
         </InfoBlock>
         <InfoBlock label="Total Plays">
-          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{song.totalPlays.toLocaleString()}</span>
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{song.totalPlays}</span>
         </InfoBlock>
         {s.notes && (
           <InfoBlock label="Notes">
@@ -78,7 +79,11 @@ function ExpandedRow({ song }: { song: AdminSong }) {
         )}
         {song.dropAt && (
           <InfoBlock label="Scheduled For">
-            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{format(new Date(song.dropAt), 'MMM d, yyyy HH:mm')}</span>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              <span suppressHydrationWarning>
+                {format(new Date(song.dropAt), 'MMM d, yyyy HH:mm')}
+              </span>
+            </span>
           </InfoBlock>
         )}
       </div>
@@ -130,21 +135,23 @@ function RowActions({ song, onAction }: {
   song: AdminSong;
   onAction: (type: string, song: AdminSong) => void;
 }) {
-  const { status } = song;
+  const s = song.status;
   return (
     <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-      {status === 'PENDING' && (
+      {(s === 'PENDING' || s === 'APPROVED') && (
         <>
-          <ActionBtn label="✓ Approve" bg="var(--success-light)" color="var(--success)" border="#6EE7B7" onClick={() => onAction('approve', song)} />
-          <ActionBtn label="✕ Reject"  bg="var(--danger-light)"  color="var(--danger)"  border="#FCA5A5" onClick={() => onAction('reject', song)} />
-          <ActionBtn label="↩ Reupload" bg="var(--warning-light)" color="var(--warning)" border="#FDE68A" onClick={() => onAction('reupload', song)} />
+          <ActionBtn label="✓ Approve"  bg="var(--success-light)" color="var(--success)" border="#6EE7B7" onClick={() => onAction('approve', song)} />
+          <ActionBtn label="✕ Reject"   bg="var(--danger-light)"  color="var(--danger)"  border="#FCA5A5" onClick={() => onAction('reject', song)} />
         </>
       )}
-      {(status === 'TAKEN_DOWN' || status === 'REJECTED') && (
+      {s === 'LIVE' && (
+        <ActionBtn label="⊘ Take Down" bg="var(--danger-light)" color="var(--danger)" border="#FCA5A5" onClick={() => onAction('takedown', song)} />
+      )}
+      {(s === 'TAKEN_DOWN' || s === 'REJECTED' || s === 'REUPLOAD_REQUIRED') && (
         <ActionBtn label="↑ Restore" bg="var(--accent-light)" color="var(--accent)" border="#A5B4FC" onClick={() => onAction('restore', song)} />
       )}
-      {(status === 'LIVE' || status === 'APPROVED') && (
-        <ActionBtn label="↩ Reupload" bg="var(--warning-light)" color="var(--warning)" border="#FDE68A" onClick={() => onAction('reupload', song)} />
+      {s === 'SCHEDULED' && (
+        <ActionBtn label="✓ Release Now" bg="var(--success-light)" color="var(--success)" border="#6EE7B7" onClick={() => onAction('approve', song)} />
       )}
     </div>
   );
@@ -181,7 +188,7 @@ export default function SongsPage() {
     queryKey: ['songs-page', 'pending-count'],
     queryFn: () => adminApi.getSongs({ status: 'PENDING', page: 1, size: 1 }),
     select: (r) => r.data.totalItems,
-    staleTime: 30_000,
+    staleTime: 0,
   });
 
   const { data, isLoading } = useQuery({
@@ -199,19 +206,25 @@ export default function SongsPage() {
     qc.invalidateQueries({ queryKey: BADGE_QUERY_KEYS.pendingSongs });
   }, [qc]);
 
-  const approve  = useMutation({ mutationFn: (id: string) => adminApi.approveSong(id),                                                onSuccess: invalidate });
-  const reject   = useMutation({ mutationFn: ({ id, reason }: { id: string; reason: string }) => adminApi.rejectSong(id, reason),     onSuccess: invalidate });
-  const reupload = useMutation({ mutationFn: ({ id, notes }: { id: string; notes: string })  => adminApi.requireReupload(id, notes),   onSuccess: invalidate });
-  const restore  = useMutation({ mutationFn: (id: string) => adminApi.restoreSong(id),                                                onSuccess: invalidate });
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status, notes }: { id: string; status: SongStatus; notes?: string }) =>
+      adminApi.updateSongStatus(id, status, notes),
+    onSuccess: invalidate,
+  });
+  const reupload = useMutation({ mutationFn: ({ id, notes }: { id: string; notes: string }) => adminApi.requireReupload(id, notes), onSuccess: invalidate });
 
   function handleAction(type: string, song: AdminSong) {
     if (type === 'approve') {
-      approve.mutateAsync(song.id)
+      statusMutation.mutateAsync({ id: song.id, status: 'LIVE' })
         .then(() => toast('Song approved'))
         .catch(() => toast('Action failed', 'error'));
     } else if (type === 'restore') {
-      restore.mutateAsync(song.id)
+      statusMutation.mutateAsync({ id: song.id, status: 'LIVE' })
         .then(() => toast('Song restored'))
+        .catch(() => toast('Action failed', 'error'));
+    } else if (type === 'takedown') {
+      statusMutation.mutateAsync({ id: song.id, status: 'TAKEN_DOWN' })
+        .then(() => toast('Song taken down'))
         .catch(() => toast('Action failed', 'error'));
     } else {
       setDialog({ type, song, notes: '' });
@@ -224,22 +237,30 @@ export default function SongsPage() {
       if ((dialog.type === 'reject' || dialog.type === 'bulk-reject') && dialog.notes.length < 10) return;
 
       if (dialog.type === 'reject' && dialog.song) {
-        await reject.mutateAsync({ id: dialog.song.id, reason: dialog.notes });
+        await statusMutation.mutateAsync({ id: dialog.song.id, status: 'REJECTED', notes: dialog.notes });
         toast('Song rejected');
       } else if (dialog.type === 'reupload' && dialog.song) {
         await reupload.mutateAsync({ id: dialog.song.id, notes: dialog.notes });
         toast('Reupload requested');
       } else if (dialog.type === 'bulk-approve') {
-        await Promise.all(selectedIds.map((id) => approve.mutateAsync(id)));
+        await Promise.all(selectedIds.map((id) => statusMutation.mutateAsync({ id, status: 'LIVE' })));
         toast(`${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''} approved`);
         setSelectedIds([]);
       } else if (dialog.type === 'bulk-reject') {
-        await Promise.all(selectedIds.map((id) => reject.mutateAsync({ id, reason: dialog.notes })));
+        await Promise.all(selectedIds.map((id) => statusMutation.mutateAsync({ id, status: 'REJECTED', notes: dialog.notes })));
         toast(`${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''} rejected`);
         setSelectedIds([]);
       } else if (dialog.type === 'bulk-reupload') {
         await Promise.all(selectedIds.map((id) => reupload.mutateAsync({ id, notes: dialog.notes })));
         toast(`Reupload requested for ${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''}`);
+        setSelectedIds([]);
+      } else if (dialog.type === 'bulk-takedown') {
+        await Promise.all(selectedIds.map((id) => statusMutation.mutateAsync({ id, status: 'TAKEN_DOWN' })));
+        toast(`${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''} taken down`);
+        setSelectedIds([]);
+      } else if (dialog.type === 'bulk-restore') {
+        await Promise.all(selectedIds.map((id) => statusMutation.mutateAsync({ id, status: 'LIVE' })));
+        toast(`${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''} restored`);
         setSelectedIds([]);
       }
     } catch {
@@ -263,7 +284,15 @@ export default function SongsPage() {
       key: 'title', header: 'Title', width: 'auto',
       render: (s) => (
         <div>
-          <p style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', margin: 0 }}>{s.title}</p>
+          <Link
+            href={`/songs/${s.id}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)', textDecoration: 'none' }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--accent)'; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'var(--text)'; }}
+          >
+            {s.title}
+          </Link>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>{s.artistName ?? '—'}</p>
         </div>
       ),
@@ -293,12 +322,15 @@ export default function SongsPage() {
     },
   ];
 
-  const tabs = STATUS_TABS.map((t) =>
-    t.key === 'PENDING' ? { ...t, count: pendingCount } : t,
-  );
+  const tabs = STATUS_TABS.map((t) => {
+    if (t.key === 'PENDING')
+      return { ...t, count: pendingCount }
+    if (t.key === '')
+      return { ...t, count: data?.totalItems }
+    return t
+  })
 
   const needsNotes = dialog?.type === 'reject' || dialog?.type === 'bulk-reject' || dialog?.type === 'reupload' || dialog?.type === 'bulk-reupload';
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -358,14 +390,26 @@ export default function SongsPage() {
           <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--accent)', flex: 1 }}>
             {selectedIds.length} song{selectedIds.length !== 1 ? 's' : ''} selected
           </span>
-          <BulkBtn label="✓ Approve all" bg="var(--success)"  onClick={() => setDialog({ type: 'bulk-approve',  notes: '' })} />
-          <BulkBtn label="✕ Reject all"  bg="var(--danger)"   onClick={() => setDialog({ type: 'bulk-reject',   notes: '' })} />
-          <BulkBtn label="↩ Reupload"    bg="var(--warning)"  onClick={() => setDialog({ type: 'bulk-reupload', notes: '' })} />
+          {(statusFilter === '' || statusFilter === 'PENDING' || statusFilter === 'APPROVED' || statusFilter === 'REJECTED' || statusFilter === 'REUPLOAD_REQUIRED') && (
+            <>
+              <BulkBtn label="✓ Approve all" bg="var(--success)" onClick={() => setDialog({ type: 'bulk-approve',  notes: '' })} />
+              <BulkBtn label="✕ Reject all"  bg="var(--danger)"  onClick={() => setDialog({ type: 'bulk-reject',   notes: '' })} />
+            </>
+          )}
+          {(statusFilter === '' || statusFilter === 'PENDING' || statusFilter === 'APPROVED') && (
+            <BulkBtn label="↩ Reupload" bg="var(--warning)" onClick={() => setDialog({ type: 'bulk-reupload', notes: '' })} />
+          )}
+          {(statusFilter === 'LIVE' || statusFilter === 'SCHEDULED') && (
+            <BulkBtn label="⊘ Take Down all" bg="var(--danger)"  onClick={() => setDialog({ type: 'bulk-takedown', notes: '' })} />
+          )}
+          {statusFilter === 'TAKEN_DOWN' && (
+            <BulkBtn label="↑ Restore all" bg="var(--accent)" onClick={() => setDialog({ type: 'bulk-restore', notes: '' })} />
+          )}
           <BulkBtn
             label="✕ Clear"
-            bg="transparent"
-            color="var(--accent)"
-            border="var(--accent)"
+            bg="var(--surface)"
+            color="var(--text-muted)"
+            border="var(--border)"
             onClick={() => setSelectedIds([])}
           />
         </div>
@@ -450,6 +494,28 @@ export default function SongsPage() {
         description="These songs will be approved immediately."
         onConfirm={confirmDialog}
         confirmLabel="Approve all"
+        confirmVariant="success"
+      />
+
+      {/* Bulk take-down confirm */}
+      <ConfirmDialog
+        open={dialog?.type === 'bulk-takedown'}
+        onOpenChange={(o) => { if (!o) setDialog(null); }}
+        title="Take Down Selected Songs"
+        description={`Take down ${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''}? They will be removed from the platform.`}
+        onConfirm={confirmDialog}
+        confirmLabel="Take Down"
+        confirmVariant="destructive"
+      />
+
+      {/* Bulk restore confirm */}
+      <ConfirmDialog
+        open={dialog?.type === 'bulk-restore'}
+        onOpenChange={(o) => { if (!o) setDialog(null); }}
+        title="Restore Selected Songs"
+        description={`Restore ${selectedIds.length} song${selectedIds.length !== 1 ? 's' : ''} to Live?`}
+        onConfirm={confirmDialog}
+        confirmLabel="Restore"
         confirmVariant="success"
       />
     </div>

@@ -16,12 +16,18 @@ export class ArtistProfile {
   id: string;
 
   @Index({ unique: true })
-  @Column({ name: 'user_id' })
-  userId: string;
+  @Column({ name: 'user_id', nullable: true })
+  userId: string | null;
 
-  @OneToOne(() => User, { onDelete: 'CASCADE' })
+  @OneToOne(() => User, { onDelete: 'CASCADE', nullable: true })
   @JoinColumn({ name: 'user_id' })
-  user: User;
+  user: User | null;
+
+  @Column({ name: 'is_official', default: false })
+  isOfficial: boolean;
+
+  @Column({ name: 'cover_image_url', length: 500, nullable: true })
+  coverImageUrl: string | null;
 
   @Column({ name: 'stage_name', length: 100 })
   stageName: string;
