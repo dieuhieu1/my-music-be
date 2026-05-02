@@ -5,6 +5,7 @@ import { Repository } from 'typeorm';
 import { Song } from '../songs/entities/song.entity';
 import { Album } from '../albums/entities/album.entity';
 import { ArtistProfile } from '../auth/entities/artist-profile.entity';
+import { User } from '../auth/entities/user.entity';
 import { SongsService } from '../songs/songs.service';
 import { AlbumsService } from '../albums/albums.service';
 import { StorageService } from '../storage/storage.service';
@@ -34,12 +35,16 @@ export class SearchService {
     const [songs, albums, artists] = await Promise.all([
       this.songs
         .createQueryBuilder('s')
+        .select('s')
+        .addSelect('COALESCE(ap.stageName, u.name)', 'artistName')
+        .leftJoin(ArtistProfile, 'ap', '(s.artist_profile_id::text = ap.id::text AND s.artist_profile_id IS NOT NULL) OR (s.user_id::text = ap.user_id::text AND s.artist_profile_id IS NULL)')
+        .leftJoin(User, 'u', 'u.id::text = s.user_id::text')
         .where('s.status = :status', { status: SongStatus.LIVE })
         .andWhere('s.title ILIKE :q', { q })
-        .orderBy('s.listen_count', 'DESC')
+        .orderBy('s.listenCount', 'DESC')
         .skip(skip)
         .take(limit)
-        .getMany(),
+        .getRawAndEntities(),
 
       this.albums
         .createQueryBuilder('a')
@@ -59,7 +64,10 @@ export class SearchService {
     ]);
 
     return {
-      songs:   await Promise.all(songs.map((s)  => this.songsService.buildSongResponse(s))),
+      songs:   await Promise.all(songs.entities.map((s, idx)  => {
+        const rawRow = (songs as any).raw[idx];
+        return this.songsService.buildSongResponse(s, rawRow?.artistName);
+      })),
       albums:  await Promise.all(albums.map((a) => this.albumsService.buildAlbumSummary(a))),
       artists: artists.map((ap) => this.buildArtistResult(ap)),
     };

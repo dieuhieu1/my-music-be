@@ -19,6 +19,7 @@ import { Album } from '../albums/entities/album.entity';
 import { AlbumSong } from '../albums/entities/album-song.entity';
 import { GenreSuggestion } from '../genres/entities/genre-suggestion.entity';
 import { User } from '../auth/entities/user.entity';
+import { ArtistProfile } from '../auth/entities/artist-profile.entity';
 import { StorageService } from '../storage/storage.service';
 import { AlbumsService } from '../albums/albums.service';
 import { QUEUE_NAMES } from '../queue/queue.constants';
@@ -263,8 +264,12 @@ export class SongsService {
 
     const qb = this.songs
       .createQueryBuilder('s')
+      .select('s')
+      .addSelect('COALESCE(ap.stageName, u.name)', 'artistName')
+      .leftJoin(ArtistProfile, 'ap', '(s.artist_profile_id::text = ap.id::text AND s.artist_profile_id IS NOT NULL) OR (s.user_id::text = ap.user_id::text AND s.artist_profile_id IS NULL)')
+      .leftJoin(User, 'u', 'u.id::text = s.user_id::text')
       .where('s.status = :status', { status: SongStatus.LIVE })
-      .orderBy('s.created_at', 'DESC')
+      .orderBy('s.createdAt', 'DESC')
       .skip(skip)
       .take(limit);
 
@@ -287,9 +292,14 @@ export class SongsService {
       );
     }
 
-    const [items, total] = await qb.getManyAndCount();
+    const { entities, raw } = await qb.getRawAndEntities();
+    const total = await qb.getCount();
+
     return {
-      items: await Promise.all(items.map((s) => this.buildSongResponse(s))),
+      items: await Promise.all(entities.map((s, idx) => {
+        const rawRow = raw[idx];
+        return this.buildSongResponse(s, rawRow?.artistName);
+      })),
       total,
       page,
       limit,
@@ -463,15 +473,28 @@ export class SongsService {
   // ── Response builder ──────────────────────────────────────────────────────
   // energy is intentionally excluded — never exposed to artists (BL-37A)
 
-  async buildSongResponse(song: Song) {
+  async buildSongResponse(song: Song, artistName?: string) {
     const coverArtUrl = song.coverArtUrl
       ? this.storage.getPublicUrl(this.storage.getBuckets().images, song.coverArtUrl)
       : null;
+
+    // Fallback if artistName not provided (e.g. for single-record fetches without query builder)
+    let finalArtistName = artistName;
+    if (!finalArtistName) {
+      const qb = this.dataSource.createQueryBuilder(Song, 's')
+        .select('COALESCE(ap.stageName, u.name)', 'artistName')
+        .leftJoin(ArtistProfile, 'ap', '(s.artist_profile_id::text = ap.id::text AND s.artist_profile_id IS NOT NULL) OR (s.user_id::text = ap.user_id::text AND s.artist_profile_id IS NULL)')
+        .leftJoin(User, 'u', 'u.id::text = s.user_id::text')
+        .where('s.id = :id', { id: song.id });
+      const result = await qb.getRawOne();
+      finalArtistName = result?.artistName ?? 'Unknown Artist';
+    }
 
     return {
       id: song.id,
       userId: song.userId,
       title: song.title,
+      artistName: finalArtistName,
       duration: song.duration,
       coverArtUrl,
       genreIds: song.genreIds ?? [],

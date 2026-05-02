@@ -13,13 +13,17 @@ import { Role } from '@mymusic/types';
 import { getRoleHome } from '@/lib/utils/roleRedirect';
 import NotificationBell from '@/components/layout/NotificationBell';
 
+const NAV_LINKS = [
+  { label: 'Explore', href: 'browse'   },
+  { label: 'Artists', href: 'artists'  },
+  { label: 'Genres',  href: 'genres'   },
+];
+
 export default function TopBar() {
   const { locale } = useParams<{ locale: string }>();
   const router   = useRouter();
   const pathname = usePathname();
   const { user, hasRole, clearUser } = useAuthStore();
-
-  const isExplorePage = pathname === `/${locale}/browse` || pathname.startsWith(`/${locale}/browse/`);
 
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -54,58 +58,60 @@ export default function TopBar() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      padding: '0 24px',
-      height: 56,
+      padding: '0 clamp(20px, 5vw, 72px)',
+      height: 68,
       background: 'var(--ivory)',
       borderBottom: '2px solid var(--gold)',
       boxShadow: '0 2px 0 var(--gold), 0 4px 32px rgba(232,184,75,0.25), 0 1px 80px rgba(232,184,75,0.10)',
     }}>
 
-      {/* ── Left: nav arrows + Explore pill ─────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        {[
-          { icon: <ChevronLeft size={16} />, action: () => router.back() },
-          { icon: <ChevronRight size={16} />, action: () => router.forward() },
-        ].map(({ icon, action }, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={action}
-            style={{
-              width: 30, height: 30, borderRadius: '50%', border: 'none',
-              background: 'rgba(13,13,13,0.06)',
-              color: 'var(--charcoal)', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              transition: 'background 0.15s, color 0.15s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'rgba(13,13,13,0.12)'; e.currentTarget.style.color = 'var(--gold-dim)'; }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(13,13,13,0.06)'; e.currentTarget.style.color = 'var(--charcoal)'; }}
-          >
-            {icon}
-          </button>
-        ))}
+      {/* ── Left: Logo ──────────────────────────────────────────────────────── */}
+      <Link href={`/${locale}`} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
+        <div style={{
+          width: 34, height: 34, borderRadius: '50%', background: 'var(--gold)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 0 16px rgba(232,184,75,0.4)',
+          animation: 'ringPulse 3s ease-in-out infinite',
+        }}>
+          <svg width="14" height="14" viewBox="0 0 18 18" fill="none">
+            <path d="M7 3.5V14.5M7 3.5L13 6M7 3.5L13 6V11.5L7 14.5V3.5Z" stroke="#0d0d0d" strokeWidth="1.8" strokeLinejoin="round"/>
+          </svg>
+        </div>
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.18rem', fontWeight: 600, color: 'var(--charcoal)', letterSpacing: '0.01em' }}>
+          My Music
+        </span>
+      </Link>
 
-        <Link
-          href={`/${locale}/browse`}
-          style={{
-            marginLeft: 8,
-            padding: '6px 16px',
-            borderRadius: 20,
-            background: isExplorePage ? 'var(--gold)' : 'rgba(13,13,13,0.07)',
-            color: 'var(--charcoal)',
-            fontSize: '0.82rem',
-            fontFamily: 'var(--font-body)',
-            fontWeight: isExplorePage ? 700 : 500,
-            letterSpacing: '0.01em',
-            textDecoration: 'none',
-            transition: 'background 0.18s',
-          }}
-          onMouseEnter={e => { if (!isExplorePage) (e.currentTarget as HTMLElement).style.background = 'rgba(13,13,13,0.12)'; }}
-          onMouseLeave={e => { if (!isExplorePage) (e.currentTarget as HTMLElement).style.background = 'rgba(13,13,13,0.07)'; }}
-        >
-          Explore
-        </Link>
-      </div>
+      {/* ── Center: Nav ─────────────────────────────────────────────────────── */}
+      <nav style={{ display: 'flex', gap: 36, alignItems: 'center' }}>
+        {NAV_LINKS.map(({ label, href }) => {
+          const isActive = pathname === `/${locale}/${href}` || pathname.startsWith(`/${locale}/${href}/`);
+          return (
+            <Link
+              key={label}
+              href={`/${locale}/${href}`}
+              style={{
+                fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase',
+                color: isActive ? 'var(--gold-dim)' : 'var(--charcoal)',
+                textDecoration: 'none', fontWeight: isActive ? 700 : 500,
+                position: 'relative', paddingBottom: 2,
+                transition: 'color 0.2s cubic-bezier(0.16,1,0.3,1)',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--gold)'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = isActive ? 'var(--gold-dim)' : 'var(--charcoal)'; }}
+            >
+              {label}
+              {isActive && (
+                <span style={{
+                  position: 'absolute', bottom: -2, left: 0, right: 0,
+                  height: 2, background: 'var(--gold)',
+                  borderRadius: 1,
+                }} />
+              )}
+            </Link>
+          );
+        })}
+      </nav>
 
       {/* ── Right: notification + user ───────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

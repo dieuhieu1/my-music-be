@@ -370,13 +370,24 @@ export class PlaylistsService {
       order: { position: 'ASC' },
     });
 
-    // Batch-fetch artist names for songs
-    const artistUserIds = [...new Set(playlistSongs.map((ps) => ps.song?.userId).filter(Boolean))] as string[];
-    const artistProfiles =
-      artistUserIds.length > 0
-        ? await this.artistProfiles.findBy({ userId: artistUserIds as any })
-        : [];
-    const artistMap = new Map<string, string>(artistProfiles.map((ap) => [ap.userId, ap.stageName] as [string, string]));
+    // Batch-fetch artist names for songs correctly (supporting Official Artists + Fallback)
+    const songIds = playlistSongs.map((ps) => ps.songId).filter(Boolean);
+    const artistMap = new Map<string, string>();
+
+    if (songIds.length > 0) {
+      const artistRows = await this.dataSource
+        .createQueryBuilder(Song, 's')
+        .select('s.id', 'songId')
+        .addSelect('COALESCE(ap.stageName, u.name)', 'artistName')
+        .leftJoin(ArtistProfile, 'ap', '(s.artist_profile_id::text = ap.id::text AND s.artist_profile_id IS NOT NULL) OR (s.user_id::text = ap.user_id::text AND s.artist_profile_id IS NULL)')
+        .leftJoin(User, 'u', 'u.id::text = s.user_id::text')
+        .where('s.id IN (:...songIds)', { songIds })
+        .getRawMany<{ songId: string; artistName: string }>();
+
+      for (const row of artistRows) {
+        artistMap.set(row.songId, row.artistName);
+      }
+    }
 
     const isSaved =
       playlist.userId !== requesterId
@@ -411,7 +422,7 @@ export class PlaylistsService {
       addedAt: ps.addedAt,
       id: song.id,
       title: song.title,
-      artistName: artistMap.get(song.userId) ?? null,
+      artistName: artistMap.get(song.id) ?? 'Unknown Artist',
       duration: song.duration,
       coverArtUrl,
       bpm: song.bpm,

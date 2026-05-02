@@ -14,6 +14,7 @@ import { Playlist } from '../playlists/entities/playlist.entity';
 import { PlaylistSong } from '../playlists/entities/playlist-song.entity';
 import { Genre } from '../genres/entities/genre.entity';
 import { ArtistProfile } from '../auth/entities/artist-profile.entity';
+import { User } from '../auth/entities/user.entity';
 import { UserGenrePreference } from '../users/entities/user-genre-preference.entity';
 import { RecommendationCache } from './entities/recommendation-cache.entity';
 
@@ -69,8 +70,8 @@ interface RawCandidateSong {
   camelotKey: string | null;
   energy: number | null;      // internal only — stripped before any response
   listenCount: number;
-  createdAt: Date;
-  stageName: string | null;
+  createdAt:   Date;
+  artistName:  string | null;
 }
 
 interface ScoredCandidate {
@@ -396,7 +397,7 @@ export class RecommendationsService {
       id: string; title: string; userId: string; coverArtUrl: string | null;
       duration: string | null; genreIdsRaw: string | null; bpm: string | null;
       camelotKey: string | null; energy: string | null; listenCount: string;
-      createdAt: Date; stageName: string | null;
+      createdAt: Date; artistName: string | null;
     };
 
     const qb = this.songsRepo
@@ -412,8 +413,9 @@ export class RecommendationsService {
       .addSelect('s.energy',       'energy')
       .addSelect('s.listenCount',  'listenCount')
       .addSelect('s.createdAt',    'createdAt')
-      .addSelect('ap.stageName',   'stageName')
-      .leftJoin(ArtistProfile, 'ap', 'ap.userId = s.userId')
+      .addSelect('COALESCE(ap.stageName, u.name)', 'artistName')
+      .leftJoin(ArtistProfile, 'ap', '(s.artist_profile_id::text = ap.id::text AND s.artist_profile_id IS NOT NULL) OR (s.user_id::text = ap.user_id::text AND s.artist_profile_id IS NULL)')
+      .leftJoin(User, 'u', 'u.id::text = s.user_id::text')
       .where('s.status = :status', { status: SongStatus.LIVE })
       .limit(MAX_CANDIDATES);
 
@@ -442,7 +444,7 @@ export class RecommendationsService {
       energy:      r.energy      != null ? parseFloat(r.energy)      : null,
       listenCount: parseInt(r.listenCount, 10) || 0,
       createdAt:   r.createdAt,
-      stageName:   r.stageName,
+      artistName:  r.artistName,
     }));
 
     // Post-filter by mood genre IDs (simple-array CSV column cannot be JOINed directly)
@@ -461,7 +463,7 @@ export class RecommendationsService {
       id: string; title: string; userId: string; coverArtUrl: string | null;
       duration: string | null; genreIdsRaw: string | null; bpm: string | null;
       camelotKey: string | null; energy: string | null; listenCount: string;
-      createdAt: Date; stageName: string | null;
+      createdAt: Date; artistName: string | null;
     };
 
     const rawRows = await this.songsRepo
@@ -477,8 +479,9 @@ export class RecommendationsService {
       .addSelect('s.energy',      'energy')
       .addSelect('s.listenCount', 'listenCount')
       .addSelect('s.createdAt',   'createdAt')
-      .addSelect('ap.stageName',  'stageName')
-      .leftJoin(ArtistProfile, 'ap', 'ap.userId = s.userId')
+      .addSelect('COALESCE(ap.stageName, u.name)', 'artistName')
+      .leftJoin(ArtistProfile, 'ap', '(s.artist_profile_id::text = ap.id::text AND s.artist_profile_id IS NOT NULL) OR (s.user_id::text = ap.user_id::text AND s.artist_profile_id IS NULL)')
+      .leftJoin(User, 'u', 'u.id::text = s.user_id::text')
       .where('s.status = :status', { status: SongStatus.LIVE })
       .orderBy('s.listenCount', 'DESC')
       .limit(size * 3)
@@ -496,7 +499,7 @@ export class RecommendationsService {
       energy:      r.energy    != null ? parseFloat(r.energy)    : null,
       listenCount: parseInt(r.listenCount, 10) || 0,
       createdAt:   r.createdAt,
-      stageName:   r.stageName,
+      artistName:  r.artistName,
     }));
 
     const genreMap = await this.buildGenreMap(candidates);
@@ -618,7 +621,7 @@ export class RecommendationsService {
     return {
       id:          c.id,
       title:       c.title,
-      artistName:  c.stageName ?? '',
+      artistName:  c.artistName ?? 'Unknown Artist',
       coverArtUrl: c.coverArtUrl,
       duration:    c.duration,
       genres:      genreIds.map(gid => genreMap.get(gid) ?? gid),
