@@ -13,6 +13,7 @@ import { RecommendationSection } from '@/components/recommendations/Recommendati
 import { useRecommendations } from '@/hooks/useRecommendations';
 import { useMoodRecs } from '@/hooks/useMoodRecs';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { usePlayer } from '@/hooks/usePlayer';
 import { useQueue } from '@/hooks/useQueue';
 import { genresApi } from '@/lib/api/genres.api';
 import type { MoodType } from '@/lib/api/recommendations.api';
@@ -615,7 +616,7 @@ const MOOD_LABELS: Record<MoodType, string> = {
 function AuthZone({ locale }: { locale: string }) {
   const { songs, isLoading, timeRange, setTimeRange, loadMore, hasMore } = useRecommendations(20);
   const { songs: moodSongs, resolvedMood, inferred, isLoading: moodLoading } = useMoodRecs(undefined, 20);
-  const { setSong } = usePlayerStore();
+  const { playWithContext } = usePlayer();
   const { addToQueue } = useQueue();
 
   const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -624,15 +625,14 @@ function AuthZone({ locale }: { locale: string }) {
 
   const playAll = (tracks: typeof songs) => {
     if (tracks.length === 0) return;
-    setSong({
-      id: tracks[0].id,
-      title: tracks[0].title,
-      artistName: tracks[0].artistName,
-      coverArtUrl: tracks[0].coverArtUrl,
+    playWithContext(tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artistName: t.artistName,
+      coverArtUrl: t.coverArtUrl,
       fileUrl: '',
-      durationSeconds: tracks[0].duration,
-    });
-    tracks.slice(1).forEach((s) => addToQueue(s.id));
+      durationSeconds: t.duration,
+    })), 0, 'DISCOVER');
   };
 
   return (

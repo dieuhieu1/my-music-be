@@ -21,7 +21,7 @@ const fmtHours = (h: number) => {
 export default function LikedSongsPage() {
   const { locale } = useParams<{ locale: string }>();
   const { currentSong, isPlaying } = usePlayerStore();
-  const { playSong } = usePlayer();
+  const { playWithContext } = usePlayer();
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,16 +37,20 @@ export default function LikedSongsPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  const handlePlay = (song: PlaylistSongItem) => {
+  const handlePlay = (song: PlaylistSongItem, startIndex: number) => {
     if (song.isTakenDown || song.status !== 'LIVE') return;
-    playSong({
-      id: song.id,
-      title: song.title,
-      artistName: song.artistName ?? 'Unknown',
-      coverArtUrl: song.coverArtUrl,
-      fileUrl: '',
-      durationSeconds: song.duration ?? 0,
-    });
+    const items = (playlist?.songs ?? [])
+      .filter(s => !s.isTakenDown && s.status === 'LIVE')
+      .map(s => ({
+        id: s.id,
+        title: s.title,
+        artistName: s.artistName ?? 'Unknown',
+        coverArtUrl: s.coverArtUrl,
+        fileUrl: '',
+        durationSeconds: s.duration ?? 0,
+      }));
+    const actualIdx = items.findIndex(i => i.id === song.id);
+    playWithContext(items, actualIdx >= 0 ? actualIdx : startIndex, 'PLAYLIST');
   };
 
   const handleUnlike = async (e: React.MouseEvent, songId: string) => {
@@ -147,7 +151,7 @@ export default function LikedSongsPage() {
           return (
             <div
               key={song.playlistSongId}
-              onClick={() => !unavailable && handlePlay(song)}
+              onClick={() => !unavailable && handlePlay(song, i)}
               className={`anim-fade-up anim-fade-up-${Math.min(i + 1, 8)}`}
               style={{
                 display: 'flex', alignItems: 'center', gap: 14,

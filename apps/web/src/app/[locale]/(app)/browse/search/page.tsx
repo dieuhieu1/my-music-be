@@ -38,7 +38,7 @@ function EmptySection({ label }: { label: string }) {
 export default function SearchPage() {
   const { locale } = useParams<{ locale: string }>();
   const searchParams = useSearchParams();
-  const { playSong } = usePlayer();
+  const { playWithContext } = usePlayer();
   const { addToQueue } = useQueue();
 
   const [query, setQuery]     = useState(searchParams.get('q') ?? '');
@@ -75,7 +75,19 @@ export default function SearchPage() {
     debounceRef.current = setTimeout(() => doSearch(val), 320);
   };
 
-  const handlePlay = (song: PlayerSong) => playSong(song);
+  const handlePlay = (song: PlayerSong) => {
+    if (!results) return;
+    const items = results.songs.map(s => ({
+      id: s.id,
+      title: s.title,
+      artistName: s.artistName ?? 'Unknown',
+      coverArtUrl: s.coverArtUrl,
+      fileUrl: '',
+      durationSeconds: s.duration ?? 0,
+    }));
+    const idx = items.findIndex(i => i.id === song.id);
+    playWithContext(items, idx >= 0 ? idx : 0, 'SEARCH');
+  };
 
   const hasResults = results && (
     results.songs.length > 0 || results.albums.length > 0 || results.artists.length > 0

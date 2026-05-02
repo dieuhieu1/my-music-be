@@ -106,7 +106,7 @@ function IconBtn({
 export default function PlayerBar() {
   const { locale } = useParams<{ locale: string }>();
   const { currentSong, isPlaying, positionSeconds, volume, repeatMode, cycleRepeat } = usePlayerStore();
-  const { togglePlay, seek, setVolume } = usePlayer();
+  const { togglePlay, next, previous, seek, setVolume } = usePlayer();
   const barRef    = useRef<HTMLDivElement>(null);
   const [hovering, setHovering] = useState(false);
 
@@ -223,7 +223,7 @@ export default function PlayerBar() {
 
         {/* Control buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <IconBtn title="Skip back" size={32}>
+          <IconBtn onClick={previous} title="Skip back" size={32}>
             <SkipBack size={17} fill="currentColor" />
           </IconBtn>
 
@@ -258,7 +258,7 @@ export default function PlayerBar() {
             }
           </button>
 
-          <IconBtn title="Skip forward" size={32}>
+          <IconBtn onClick={next} title="Skip forward" size={32}>
             <SkipForward size={17} fill="currentColor" />
           </IconBtn>
 

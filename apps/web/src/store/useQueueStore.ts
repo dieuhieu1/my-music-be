@@ -10,20 +10,24 @@ interface QueueItem extends PlayerSong {
 interface QueueState {
   items: QueueItem[];
   isShuffled: boolean;
+  contextType: 'PLAYLIST' | 'ALBUM' | 'DISCOVER' | 'SEARCH' | null;
 
-  setQueue: (items: QueueItem[]) => void;
+  setQueue: (items: QueueItem[], contextType?: QueueState['contextType']) => void;
   addToQueue: (item: QueueItem) => void;
   removeFromQueue: (songId: string) => void;
   clearQueue: () => void;
   reorder: (fromPosition: number, toPosition: number) => void;
   setShuffled: (shuffled: boolean) => void;
+  setContextType: (type: QueueState['contextType']) => void;
 }
 
 export const useQueueStore = create<QueueState>((set) => ({
   items: [],
   isShuffled: false,
+  contextType: null,
 
-  setQueue: (items) => set({ items }),
+  setQueue: (items, contextType = null) => set({ items, contextType }),
+  setContextType: (contextType) => set({ contextType }),
 
   addToQueue: (item) =>
     set((s) => ({ items: [...s.items, item] })),

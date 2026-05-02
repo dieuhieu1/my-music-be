@@ -25,7 +25,7 @@ function fmtHours(h: number) {
 
 export default function AlbumDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { playSong } = usePlayer();
+  const { playWithContext } = usePlayer();
   const { addToQueue } = useQueue();
   const { currentSong } = usePlayerStore();
 
@@ -43,21 +43,27 @@ export default function AlbumDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const handlePlayTrack = (track: NonNullable<Album['tracks']>[number]) => {
-    playSong({
-      id: track.songId,
-      title: track.title ?? 'Untitled',
-      artistName: '',
-      coverArtUrl: album?.coverArtUrl ?? null,
-      fileUrl: '',
-      durationSeconds: track.duration ?? 0,
-    });
+  const handlePlayTrack = (track: NonNullable<Album['tracks']>[number], startIndex: number) => {
+    if (track.status !== 'LIVE') return;
+    const items = (album?.tracks ?? [])
+      .filter(t => t.status === 'LIVE')
+      .map(t => ({
+        id: t.songId,
+        title: t.title ?? 'Untitled',
+        artistName: album?.artistName ?? '',
+        coverArtUrl: album?.coverArtUrl ?? null,
+        fileUrl: '',
+        durationSeconds: t.duration ?? 0,
+      }));
+    const actualIdx = items.findIndex(i => i.id === track.songId);
+    playWithContext(items, actualIdx >= 0 ? actualIdx : startIndex, 'ALBUM');
   };
 
   const handlePlayAll = () => {
-    if (!album?.tracks?.length) return;
-    const first = album.tracks[0];
-    handlePlayTrack(first);
+    const validTracks = album?.tracks?.filter(t => t.status === 'LIVE') ?? [];
+    if (validTracks.length > 0) {
+      handlePlayTrack(validTracks[0], 0);
+    }
   };
 
   const tracks = album?.tracks ?? [];
@@ -290,7 +296,7 @@ export default function AlbumDetailPage() {
                   <div
                     key={track.songId}
                     className={`anim-fade-up anim-fade-up-${Math.min(idx + 1, 8)}`}
-                    onClick={() => isLive && handlePlayTrack(track)}
+                    onClick={() => isLive && handlePlayTrack(track, idx)}
                     style={{
                       display: 'grid', gridTemplateColumns: '28px 1fr 80px',
                       gap: 12, padding: '10px 14px', alignItems: 'center',

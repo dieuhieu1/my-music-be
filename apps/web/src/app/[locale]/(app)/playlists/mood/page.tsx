@@ -6,6 +6,7 @@ import { useLocale } from 'next-intl';
 import { Crown, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { usePlayer } from '@/hooks/usePlayer';
 import { useQueueStore } from '@/store/useQueueStore';
 import { MoodSelector } from '@/components/recommendations/MoodSelector';
 import { SongRow } from '@/components/music/SongRow';
@@ -38,22 +39,20 @@ export default function MoodPlaylistPage() {
 
   const { songs, resolvedMood, inferred, isLoading, error } = useMoodRecs(selectedMood, 30);
 
-  const { setSong } = usePlayerStore();
+  const { playWithContext } = usePlayer();
   const { setQueue } = useQueueStore();
 
   const handlePlayAll = () => {
     if (songs.length === 0) return;
-    const items = songs.map((s, i) => ({
+    const items = songs.map((s) => ({
       id: s.id,
       title: s.title,
       artistName: s.artistName,
       coverArtUrl: s.coverArtUrl,
       fileUrl: '',
       durationSeconds: s.duration,
-      queuePosition: i + 1,
     }));
-    setQueue(items);
-    setSong(items[0]);
+    playWithContext(items, 0);
   };
 
   // Sync selector highlight when BE resolves inferred mood on load
@@ -209,8 +208,16 @@ export default function MoodPlaylistPage() {
               song={toSongRowProp(song)}
               index={i}
               artistName={song.artistName}
-              onPlay={(playerSong) => {
-                setSong(playerSong);
+              onPlay={() => {
+                const items = songs.map((s) => ({
+                  id: s.id,
+                  title: s.title,
+                  artistName: s.artistName,
+                  coverArtUrl: s.coverArtUrl,
+                  fileUrl: '',
+                  durationSeconds: s.duration,
+                }));
+                playWithContext(items, i, 'DISCOVER');
               }}
             />
           ))}

@@ -35,6 +35,6 @@ export const playbackApi = {
 
   // ── Play history (BL-30) ──────────────────────────────────────────────────
 
-  recordPlay: (songId: string, playedAt?: string) =>
-    apiClient.post('/playback/history', { songId, ...(playedAt ? { playedAt } : {}) }),
+  recordPlay: (songId: string, skipped: boolean = false, playedAt?: string) =>
+    apiClient.post('/playback/history', { songId, skipped, ...(playedAt ? { playedAt } : {}) }),
 };

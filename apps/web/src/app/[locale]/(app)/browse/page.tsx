@@ -16,7 +16,7 @@ export default function BrowsePage() {
   const { locale } = useParams<{ locale: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { playSong } = usePlayer();
+  const { playWithContext } = usePlayer();
   const { addToQueue } = useQueue();
 
   const [songs, setSongs]       = useState<Song[]>([]);
@@ -60,7 +60,18 @@ export default function BrowsePage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handlePlay = (song: PlayerSong) => playSong(song);
+  const handlePlay = (song: PlayerSong) => {
+    const items = songs.map(s => ({
+      id: s.id,
+      title: s.title,
+      artistName: s.artistName ?? 'Unknown',
+      coverArtUrl: s.coverArtUrl,
+      fileUrl: '',
+      durationSeconds: s.duration ?? 0,
+    }));
+    const idx = items.findIndex(i => i.id === song.id);
+    playWithContext(items, idx >= 0 ? idx : 0, 'SEARCH');
+  };
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 

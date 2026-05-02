@@ -2,8 +2,10 @@
 
 import { useEffect, useCallback } from 'react';
 import { usePlayerStore, type PlayerSong } from '@/store/usePlayerStore';
+import { useQueueStore } from '@/store/useQueueStore';
 import { songsApi } from '@/lib/api/songs.api';
 import { playbackApi } from '@/lib/api/playback.api';
+import { recommendationsApi, type SongRecommendationDto } from '@/lib/api/recommendations.api';
 
 // Module-level singletons — persist across re-renders and route changes
 let _audio: HTMLAudioElement | null = null;
@@ -19,15 +21,6 @@ function getAudio(): HTMLAudioElement | null {
     _listenersAttached = true;
     _audio.addEventListener('timeupdate', () => {
       usePlayerStore.getState().setPosition(Math.floor(_audio!.currentTime));
-    });
-    _audio.addEventListener('ended', () => {
-      const { repeatMode } = usePlayerStore.getState();
-      if (repeatMode === 'one' || repeatMode === 'all') {
-        _audio!.currentTime = 0;
-        _audio!.play().catch(() => usePlayerStore.getState().setPlaying(false));
-      } else {
-        usePlayerStore.getState().setPlaying(false);
-      }
     });
     _audio.addEventListener('error', () => {
       usePlayerStore.getState().setPlaying(false);
@@ -108,6 +101,88 @@ export function usePlayer() {
     store.setPlaying(!store.isPlaying);
   }, []);
 
+  const next = useCallback(async () => {
+    const { currentSong, positionSeconds } = usePlayerStore.getState();
+    const { items, setQueue, contextType } = useQueueStore.getState();
+    if (!currentSong || items.length === 0) return;
+
+    // Record skip if before 30s mark (Phase 10 BL-35B)
+    if (positionSeconds < 30) {
+      playbackApi.recordPlay(currentSong.id, true).catch(() => {});
+    }
+
+    const idx = items.findIndex(i => i.id === currentSong.id);
+
+    // If NOT in a fixed context (Album/Playlist), ALWAYS favor recommendations on Next (BL-40B)
+    const isFixedContext = contextType === 'ALBUM' || contextType === 'PLAYLIST';
+    
+    if (!isFixedContext || idx === items.length - 1) {
+      try {
+        const localHour = new Date().getHours();
+        const deviceType = /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop';
+
+        const res = await recommendationsApi.getRecommendations(
+          { size: 5 }, // Fetch a few to have some buffer
+          { localHour, deviceType }
+        );
+        const recSongs: SongRecommendationDto[] = (res.data as any).data ?? res.data ?? [];
+        if (recSongs.length > 0) {
+          const newItems = recSongs.map((s, i) => ({
+            id: s.id,
+            title: s.title,
+            artistName: s.artistName,
+            coverArtUrl: s.coverArtUrl,
+            fileUrl: '',
+            durationSeconds: s.duration,
+            queuePosition: items.length + i + 1,
+          }));
+          
+          if (!isFixedContext) {
+            // In discovery mode, we can just play the first recommendation
+            // or even replace the rest of the queue if we want.
+            // Let's just play it and keep the old items for history if needed.
+            setQueue([...items.slice(0, idx + 1), ...newItems]);
+            playSong(newItems[0]);
+          } else {
+            // End of fixed context — append and play
+            setQueue([...items, ...newItems]);
+            playSong(newItems[0]);
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('[Autoplay] Failed to fetch recommendations', err);
+      }
+    }
+
+    // Normal next for fixed context
+    const nextItem = items[(idx + 1) % items.length];
+    if (nextItem) playSong(nextItem);
+  }, [playSong]);
+
+  const previous = useCallback(async () => {
+    const { currentSong } = usePlayerStore.getState();
+    const { items } = useQueueStore.getState();
+    if (!currentSong || items.length === 0) return;
+
+    const idx = items.findIndex(i => i.id === currentSong.id);
+    const prevIdx = (idx - 1 + items.length) % items.length;
+    const prevItem = items[prevIdx];
+    if (prevItem) playSong(prevItem);
+  }, [playSong]);
+
+  const playWithContext = useCallback(async (
+    songs: PlayerSong[],
+    startIndex: number,
+    contextType: 'PLAYLIST' | 'ALBUM' | 'DISCOVER' | 'SEARCH' | null = null
+  ) => {
+    useQueueStore.getState().setQueue(
+      songs.map((s, idx) => ({ ...s, queuePosition: idx + 1 })),
+      contextType
+    );
+    await playSong(songs[startIndex]);
+  }, [playSong]);
+
   const seek = useCallback((seconds: number) => {
     const audio = getAudio();
     if (audio) {
@@ -116,5 +191,22 @@ export function usePlayer() {
     }
   }, []);
 
-  return { playSong, togglePlay, seek, setVolume };
+  // Handle natural song end — trigger next() for continuous play or autoplay
+  useEffect(() => {
+    const audio = getAudio();
+    if (!audio) return;
+    const handleEnded = () => {
+      const { repeatMode } = usePlayerStore.getState();
+      if (repeatMode === 'one') {
+        audio.currentTime = 0;
+        audio.play().catch(() => usePlayerStore.getState().setPlaying(false));
+      } else {
+        next();
+      }
+    };
+    audio.addEventListener('ended', handleEnded);
+    return () => audio.removeEventListener('ended', handleEnded);
+  }, [next]);
+
+  return { playSong, playWithContext, togglePlay, next, previous, seek, setVolume };
 }

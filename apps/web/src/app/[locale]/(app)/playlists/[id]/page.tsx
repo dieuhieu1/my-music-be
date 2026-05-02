@@ -243,7 +243,7 @@ export default function PlaylistDetailPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { currentSong, isPlaying } = usePlayerStore();
-  const { playSong } = usePlayer();
+  const { playWithContext } = usePlayer();
 
   const [playlist, setPlaylist] = useState<Playlist | null>(null);
   const [loading, setLoading] = useState(true);
@@ -274,21 +274,27 @@ export default function PlaylistDetailPage() {
       .catch(() => {});
   }, [playlist?.id, user?.id]);
 
-  const handlePlay = (song: PlaylistSongItem) => {
+  const handlePlay = (song: PlaylistSongItem, startIndex: number) => {
     if (song.isTakenDown || song.status !== 'LIVE') return;
-    playSong({
-      id: song.id,
-      title: song.title,
-      artistName: song.artistName ?? 'Unknown',
-      coverArtUrl: song.coverArtUrl,
-      fileUrl: '',
-      durationSeconds: song.duration ?? 0,
-    });
+    const items = (playlist?.songs ?? [])
+      .filter(s => !s.isTakenDown && s.status === 'LIVE')
+      .map(s => ({
+        id: s.id,
+        title: s.title,
+        artistName: s.artistName ?? 'Unknown',
+        coverArtUrl: s.coverArtUrl,
+        fileUrl: '',
+        durationSeconds: s.duration ?? 0,
+      }));
+    const actualIdx = items.findIndex(i => i.id === song.id);
+    playWithContext(items, actualIdx >= 0 ? actualIdx : startIndex, 'PLAYLIST');
   };
 
   const handlePlayAll = () => {
-    const first = playlist?.songs?.find(s => !s.isTakenDown && s.status === 'LIVE');
-    if (first) handlePlay(first);
+    const validSongs = playlist?.songs?.filter(s => !s.isTakenDown && s.status === 'LIVE') ?? [];
+    if (validSongs.length > 0) {
+      handlePlay(validSongs[0], 0);
+    }
   };
 
   const handleSave = async () => {
@@ -586,7 +592,7 @@ export default function PlaylistDetailPage() {
           return (
             <div
               key={song.playlistSongId}
-              onClick={() => !unavailable && handlePlay(song)}
+              onClick={() => !unavailable && handlePlay(song, i)}
               className={`anim-fade-up anim-fade-up-${Math.min(i + 1, 8)}`}
               style={{
                 display: 'grid',

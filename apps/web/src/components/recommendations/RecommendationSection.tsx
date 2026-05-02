@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { usePlayer } from '@/hooks/usePlayer';
 import { useQueue } from '@/hooks/useQueue';
 import { SongCard } from '@/components/music/SongCard';
 import type { SongRecommendationDto } from '@/lib/api/recommendations.api';
@@ -27,6 +28,17 @@ function recToSong(rec: SongRecommendationDto): Song {
     createdAt: rec.createdAt,
     updatedAt: rec.createdAt,
     artistName: rec.artistName,
+  };
+}
+
+function recToPlayerSong(rec: SongRecommendationDto): any {
+  return {
+    id: rec.id,
+    title: rec.title,
+    artistName: rec.artistName,
+    coverArtUrl: rec.coverArtUrl,
+    fileUrl: '',
+    durationSeconds: rec.duration,
   };
 }
 
@@ -67,7 +79,7 @@ function SkeletonCard() {
 
 export function RecommendationSection({ title, subtitle, songs, loading, onPlayAll, timeRangeToggle }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { setSong } = usePlayerStore();
+  const { playWithContext } = usePlayer();
   const { addToQueue } = useQueue();
 
   const scroll = (dir: 'left' | 'right') => {
@@ -192,7 +204,7 @@ export function RecommendationSection({ title, subtitle, songs, loading, onPlayA
                   song={recToSong(rec)}
                   index={i}
                   artistName={rec.artistName}
-                  onPlay={(playerSong) => setSong(playerSong)}
+                  onPlay={() => playWithContext(songs.map(recToPlayerSong), i, 'DISCOVER')}
                   onAddToQueue={(id) => addToQueue(id)}
                 />
               </div>
