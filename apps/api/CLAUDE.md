@@ -34,7 +34,7 @@ API: port 3001, global prefix `/api/v1`. Entry: `src/main.ts`.
 - ✅ Phase 6 — Playlists & Social Feed
 - ✅ Phase 7 — Payments & Premium Downloads
 - ✅ Phase 8 — Drops & Notifications
-- ⬜ Phase 9 — Reports, Analytics & Admin Tools
+- ✅ Phase 9 — Reports, Analytics & Admin Tools
 - ⬜ Phase 10 — Recommendations, Mood Engine & AI Chat
 
 ---
@@ -351,16 +351,42 @@ All queues registered in `QueueModule` (`@Global()`). Workers **must** be in the
 | PATCH | `/notifications/read-all` | JWT | static route — must be declared before `:id/read` |
 | PATCH | `/notifications/:id/read` | JWT | |
 
-### Admin (Phase 4B)
+### Admin (Phase 4B + Phase 9)
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
-| GET | `/admin/songs` | ADMIN | PENDING approval queue |
+| GET | `/admin/songs` | ADMIN | filterable by `status`, `search`, paginated; response includes `coverArtUrl` |
 | PATCH | `/admin/songs/:id/approve` | ADMIN | PENDING → LIVE or SCHEDULED; enqueues BullMQ drop jobs if SCHEDULED |
-| PATCH | `/admin/songs/:id/reject` | ADMIN | |
-| PATCH | `/admin/songs/:id/reupload-required` | ADMIN | |
+| PATCH | `/admin/songs/:id/reject` | ADMIN | body `{ reason }` |
+| PATCH | `/admin/songs/:id/reupload-required` | ADMIN | body `{ notes }` |
 | PATCH | `/admin/songs/:id/restore` | ADMIN | TAKEN_DOWN → LIVE |
-| POST | `/admin/users/:userId/premium` | ADMIN | manual grant |
-| DELETE | `/admin/users/:userId/premium` | ADMIN | revoke + cascade |
+| PATCH | `/admin/songs/:id/takedown` | ADMIN | LIVE → TAKEN_DOWN |
+| GET | `/admin/users` | ADMIN | filterable by `role`, `search`, paginated |
+| GET | `/admin/users/:id` | ADMIN | single user detail |
+| PATCH | `/admin/users/:id/roles` | ADMIN | body `{ roles: string[] }` |
+| GET | `/admin/users/:id/sessions` | ADMIN | returns plain array of `AdminSession` |
+| DELETE | `/admin/users/:id/sessions/:sessionId` | ADMIN | revoke one session |
+| GET | `/admin/genres/suggestions` | ADMIN | returns **plain array** (no pagination) |
+| PATCH | `/admin/genres/suggestions/:id/approve` | ADMIN | |
+| PATCH | `/admin/genres/suggestions/:id/reject` | ADMIN | body `{ notes? }` |
+| GET | `/admin/reports` | ADMIN | filterable by `status`, `targetType`, paginated |
+| PATCH | `/admin/reports/:id/dismiss` | ADMIN | body `{ notes? }` |
+| PATCH | `/admin/reports/:id/takedown` | ADMIN | body `{ notes? }` |
+| GET | `/admin/audit` | ADMIN | filterable by `action`, `adminId`, `from`, `to`, paginated |
+| GET | `/admin/payments` | ADMIN | filterable by `provider`, `status`, `from`, `to`, paginated |
+| GET | `/admin/payments/manual-grants` | ADMIN | paginated |
+| POST | `/admin/payments/grant` | ADMIN | body `{ userId, durationDays, notes? }` |
+| POST | `/admin/payments/revoke` | ADMIN | body `{ userId, notes? }` — POST not DELETE |
+
+**Admin DTO field names (confirmed from source):**
+
+| DTO / endpoint | Field | NOT |
+|----------------|-------|-----|
+| `toUserSummaryDto` (users list/detail) | `name` | `displayName` |
+| `getUserSessions` (sessions array) | `ip` | `ipAddress` |
+| `getUserSessions` (sessions array) | `lastSeenAt` | `lastUsedAt` |
+| `listPayments` | `amountVnd` | `amount` |
+| `listSongsAdmin` | `createdAt` | `uploadedAt` |
+| All paginated list endpoints | `totalItems` | `total` |
 
 ### Payments (Phase 7)
 | Method | Path | Auth | Notes |

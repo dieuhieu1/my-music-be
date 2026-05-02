@@ -11,6 +11,7 @@ my-music/
   apps/
     api/     ← NestJS backend, port 3001, prefix /api/v1
     web/     ← Next.js frontend, port 3000
+    admin/   ← Next.js 14 Admin Portal, port 3002 (standalone, no shared imports with web)
     dsp/     ← Python FastAPI sidecar, port 8000
   packages/
     types/   ← Shared TS enums + DTOs
@@ -21,6 +22,7 @@ my-music/
 
 Sub-apps have their own `CLAUDE.md`:
 - `apps/web/CLAUDE.md` — design system, routing, components, API layer, Zustand stores
+- `apps/admin/CLAUDE.md` — admin portal stack, routes, auth strategy, API layer, field name corrections
 - `apps/dsp/CLAUDE.md` — librosa pipeline, endpoint contract, CAMELOT_MAP
 
 ---
@@ -31,6 +33,7 @@ Sub-apps have their own `CLAUDE.md`:
 |---------|------|-------|
 | NestJS API | 3001 | `/api/v1` prefix |
 | Next.js | 3000 | locale-prefixed routes |
+| Admin Portal | 3002 | standalone Next.js 14; no shared code with `apps/web` |
 | Python DSP | 5000 | `GET /health`, `POST /extract` |
 | PostgreSQL | 5432 | TypeORM |
 | Redis | 6379 | BullMQ + cache + JWT denylist |
@@ -69,8 +72,9 @@ Wrapped automatically by `TransformInterceptor`.
 
 **Pagination** (all list endpoints):
 ```json
-{ "items": [...], "total": 100, "page": 1, "size": 20, "totalPages": 5 }
+{ "items": [...], "totalItems": 100, "page": 1, "size": 20, "totalPages": 5 }
 ```
+Note: the count field is `totalItems`, not `total`.
 
 **Auth**: httpOnly cookies — `access_token` (15 min), `refresh_token` (30 days). JWT denylist in Redis on logout.
 

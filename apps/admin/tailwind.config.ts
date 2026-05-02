@@ -7,21 +7,9 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
-        admin: {
-          bg: '#FAFAFA',
-          surface: '#FFFFFF',
-          border: '#E5E7EB',
-          text: '#111827',
-          muted: '#6B7280',
-          accent: '#2563EB',
-          danger: '#DC2626',
-          success: '#16A34A',
-          warning: '#D97706',
-        },
-      },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        mono: ['Cascadia Code', 'Fira Code', 'Consolas', 'monospace'],
       },
     },
   },

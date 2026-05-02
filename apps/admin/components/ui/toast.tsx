@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, X } from 'lucide-react';
-import { cn } from '@/lib/utils/cn';
 
 type ToastKind = 'success' | 'error' | 'warning';
 
@@ -12,22 +11,22 @@ interface Toast {
   kind: ToastKind;
 }
 
-interface ToastContextValue {
+interface ToastCtx {
   toast: (message: string, kind?: ToastKind) => void;
 }
 
-const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
+const ToastContext = createContext<ToastCtx>({ toast: () => {} });
 
-const icons: Record<ToastKind, React.ReactNode> = {
-  success: <CheckCircle size={16} className="text-[#16A34A]" />,
-  error: <XCircle size={16} className="text-[#DC2626]" />,
-  warning: <AlertTriangle size={16} className="text-[#D97706]" />,
+const ACCENT: Record<ToastKind, string> = {
+  success: 'var(--success)',
+  error:   'var(--danger)',
+  warning: 'var(--warning)',
 };
 
-const kindClass: Record<ToastKind, string> = {
-  success: 'border-l-[#16A34A]',
-  error: 'border-l-[#DC2626]',
-  warning: 'border-l-[#D97706]',
+const ICONS: Record<ToastKind, React.ReactNode> = {
+  success: <CheckCircle   size={15} color="var(--success)" strokeWidth={2} />,
+  error:   <XCircle       size={15} color="var(--danger)"  strokeWidth={2} />,
+  warning: <AlertTriangle size={15} color="var(--warning)" strokeWidth={2} />,
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -44,23 +43,59 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
+      <div style={{
+        position: 'fixed',
+        bottom: 20,
+        right: 20,
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 8,
+        pointerEvents: 'none',
+      }}>
         {toasts.map((t) => (
           <div
             key={t.id}
-            className={cn(
-              'flex items-center gap-3 rounded-lg border border-[#E5E7EB] bg-white px-4 py-3 shadow-lg',
-              'border-l-4',
-              kindClass[t.kind],
-            )}
+            className="animate-fade-in-up"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '11px 14px 11px 12px',
+              background: 'var(--surface)',
+              border: '1px solid var(--border)',
+              borderLeft: `3px solid ${ACCENT[t.kind]}`,
+              borderRadius: 'var(--radius)',
+              minWidth: 260,
+              maxWidth: 360,
+              boxShadow: 'var(--shadow-md)',
+              pointerEvents: 'all',
+            }}
           >
-            {icons[t.kind]}
-            <span className="flex-1 text-sm text-[#111827]">{t.message}</span>
+            <div style={{ flexShrink: 0 }}>{ICONS[t.kind]}</div>
+            <span style={{ flex: 1, fontSize: 13, color: 'var(--text)', lineHeight: 1.4 }}>
+              {t.message}
+            </span>
             <button
               onClick={() => remove(t.id)}
-              className="ml-2 text-[#9CA3AF] hover:text-[#374151]"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-faint)',
+                cursor: 'pointer',
+                padding: 2,
+                borderRadius: 4,
+                flexShrink: 0,
+                transition: 'color 100ms',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-faint)'; }}
+              aria-label="Dismiss"
             >
-              <X size={14} />
+              <X size={13} strokeWidth={2.5} />
             </button>
           </div>
         ))}

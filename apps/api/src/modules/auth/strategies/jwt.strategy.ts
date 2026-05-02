@@ -15,7 +15,7 @@ export interface JwtPayload {
   exp?: number;
 }
 
-// Extracts access token from httpOnly cookie named 'access_token'
+// Extracts access token from httpOnly cookie (web app) or Authorization header (admin portal)
 function cookieExtractor(req: Request): string | null {
   return req?.cookies?.access_token ?? null;
 }
@@ -28,7 +28,10 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     private readonly users: Repository<User>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([cookieExtractor]),
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        cookieExtractor,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: config.get<string>('JWT_ACCESS_SECRET') ?? 'change_me',
       passReqToCallback: false,

@@ -243,7 +243,8 @@ export class AuthService {
     const { accessToken, refreshToken } = this.issueTokens(user, jti);
     this.setAuthCookies(res, accessToken, refreshToken);
 
-    return { user: this.safeUser(user) };
+    // accessToken included in body for admin portal (Bearer auth); web app reads httpOnly cookie
+    return { user: this.safeUser(user), accessToken };
   }
 
   // ── Logout (BL-03) ────────────────────────────────────────────────────────

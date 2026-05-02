@@ -15,7 +15,8 @@
       "Skill(agent-browser)",
       "Bash(netstat -ano)",
       "Bash(npx turbo *)",
-      "Bash(echo \"PID=$!\")"
+      "Bash(echo \"PID=$!\")",
+      "Bash(rtk grep *)"
     ]
   }
 }

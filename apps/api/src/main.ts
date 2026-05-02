@@ -13,6 +13,16 @@ async function bootstrap() {
     logger: WinstonModule.createLogger(winstonConfig),
   });
 
+  // CORS must be first — before helmet, so preflight OPTIONS requests get the right headers
+  const allowedOrigins = ['http://localhost:3000', 'http://localhost:3002'];
+
+  app.enableCors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+  });
+
   // Parse httpOnly cookies (access_token, refresh_token)
   app.use(cookieParser());
 
@@ -37,12 +47,6 @@ async function bootstrap() {
 
   // Format all errors: { success: false, data: null, error: { code, message } }
   app.useGlobalFilters(new GlobalExceptionFilter());
-
-  // Allow Next.js frontend (and any other origin defined in env)
-  app.enableCors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
-    credentials: true,
-  });
 
   const port = process.env.PORT || 3001;
   await app.listen(port);

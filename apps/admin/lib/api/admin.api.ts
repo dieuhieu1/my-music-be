@@ -53,23 +53,33 @@ export interface GenreSuggestion {
   createdAt: string;
 }
 
-// BE findAll() returns { id, name, description } — no songCount, no createdAt
+// BE findAll() returns { id, name, description, songCount }
 export interface Genre {
   id: string;
   name: string;
   description: string | null;
+  songCount: number;
 }
 
 export interface Report {
   id: string;
   targetId: string;
-  targetType: 'SONG' | 'USER' | 'PLAYLIST' | 'COMMENT';
+  targetType: 'SONG' | 'PLAYLIST' | 'ARTIST' | 'USER';
   targetTitle: string;
   reason: string;
   reporterEmail: string;
-  status: 'PENDING' | 'DISMISSED' | 'TAKEN_DOWN';
+  status: 'PENDING' | 'DISMISSED' | 'RESOLVED';
   notes: string | null;
   createdAt: string;
+}
+
+export interface RevenueSummary {
+  today: number;
+  thisMonth: number;
+  thisYear: number;
+  allTime: number;
+  last6Months: { month: string; total: number }[];
+  byProvider: { provider: string; total: number; count: number }[];
 }
 
 export interface AuditLog {
@@ -152,9 +162,13 @@ export const adminApi = {
 
   // ── Genres ───────────────────────────────────────────────────────────────
 
-  // GET /genres — public endpoint; returns plain array { id, name, description }[]
+  // GET /genres — public endpoint; returns plain array { id, name, description, songCount }[]
   getGenres: () =>
     apiClient.get<Genre[]>('/genres'),
+
+  // POST /genres — ADMIN only; creates a new confirmed genre
+  createGenre: (dto: { name: string; description?: string }) =>
+    apiClient.post<Genre>('/genres', dto),
 
   // GET /admin/genres/suggestions — returns plain array (no pagination)
   getGenreSuggestions: () =>
@@ -216,4 +230,9 @@ export const adminApi = {
 
   getUserSearch: (search: string) =>
     apiClient.get<Paginated<AdminUser>>('/admin/users', { params: { search, size: 10 } }),
+
+  // ── Revenue ──────────────────────────────────────────────────────────────
+
+  getRevenueSummary: () =>
+    apiClient.get<RevenueSummary>('/admin/revenue/summary'),
 };

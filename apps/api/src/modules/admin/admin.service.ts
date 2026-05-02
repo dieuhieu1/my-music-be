@@ -22,7 +22,7 @@ import { GenresService } from '../genres/genres.service';
 import { SongsService } from '../songs/songs.service';
 import { ReportsService } from '../reports/reports.service';
 import { PaymentsService } from '../payments/payments.service';
-import { NotificationType, Role, SongStatus } from '../../common/enums';
+import { NotificationType, PaymentStatus, Role, SongStatus } from '../../common/enums';
 import { QUEUE_NAMES } from '../queue/queue.constants';
 import { DropsService } from '../drops/drops.service';
 import { RejectSongDto } from './dto/reject-song.dto';
@@ -36,6 +36,7 @@ import { AdminGrantPremiumDto } from './dto/admin-grant-premium.dto';
 import { AdminRevokePremiumDto } from './dto/admin-revoke-premium.dto';
 import { ReportAdminQueryDto } from '../reports/dto/report-admin-query.dto';
 import { ResolveReportDto } from '../reports/dto/resolve-report.dto';
+import { StorageService } from '../storage/storage.service';
 
 const ALLOWED_APPROVE_STATUSES  = new Set([SongStatus.PENDING]);
 const ALLOWED_REJECT_STATUSES   = new Set([SongStatus.PENDING]);
@@ -59,6 +60,7 @@ export class AdminService {
     private readonly dropsService:         DropsService,
     private readonly reportsService:       ReportsService,
     private readonly paymentsService:      PaymentsService,
+    private readonly storage:              StorageService,
     @InjectQueue(QUEUE_NAMES.EMAIL) private readonly emailQueue: Queue,
   ) {}
 
@@ -271,7 +273,9 @@ export class AdminService {
       id:          s.id,
       title:       s.title,
       artistName:  (raw[i] as any)?.ap_stage_name ?? null,
-      coverArtUrl: s.coverArtUrl ?? null,
+      coverArtUrl: s.coverArtUrl
+        ? this.storage.getPublicUrl(this.storage.getBuckets().images, s.coverArtUrl)
+        : null,
       status:      s.status,
       createdAt:   s.createdAt,
       dropAt:      s.dropAt,
@@ -519,6 +523,82 @@ export class AdminService {
 
   takedownReport(adminId: string, reportId: string, dto: ResolveReportDto) {
     return this.reportsService.takedown(adminId, reportId, dto);
+  }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Phase 9 — Revenue summary (BL-74)
+  // ════════════════════════════════════════════════════════════════════════════
+
+  async getRevenueSummary() {
+    const now = new Date();
+
+    // Build last-6-months scaffold in app (ensures 0-filled months are included)
+    const monthScaffold = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+      return {
+        month:     d.toLocaleString('en-US', { month: 'short' }),
+        yearMonth: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+        total:     0,
+      };
+    });
+
+    const [totalsRows, monthlyRows, providerRows] = await Promise.all([
+      this.dataSource.query<Array<{
+        today: string; this_month: string; this_year: string; all_time: string;
+      }>>(`
+        SELECT
+          COALESCE(SUM(CASE WHEN created_at::date = CURRENT_DATE THEN amount_vnd ELSE 0 END), 0)::bigint AS today,
+          COALESCE(SUM(CASE WHEN
+            EXTRACT(YEAR  FROM created_at) = EXTRACT(YEAR  FROM NOW()) AND
+            EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM NOW())
+          THEN amount_vnd ELSE 0 END), 0)::bigint AS this_month,
+          COALESCE(SUM(CASE WHEN EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM NOW())
+          THEN amount_vnd ELSE 0 END), 0)::bigint AS this_year,
+          COALESCE(SUM(amount_vnd), 0)::bigint AS all_time
+        FROM payment_records
+        WHERE status = $1 AND amount_vnd IS NOT NULL
+      `, [PaymentStatus.SUCCESS]),
+
+      this.dataSource.query<Array<{ year_month: string; total: string }>>(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('month', created_at), 'YYYY-MM') AS year_month,
+          COALESCE(SUM(amount_vnd), 0)::bigint AS total
+        FROM payment_records
+        WHERE status = $1
+          AND amount_vnd IS NOT NULL
+          AND created_at >= DATE_TRUNC('month', NOW() - INTERVAL '5 months')
+        GROUP BY DATE_TRUNC('month', created_at)
+        ORDER BY 1
+      `, [PaymentStatus.SUCCESS]),
+
+      this.dataSource.query<Array<{ provider: string; total: string; cnt: string }>>(`
+        SELECT
+          provider,
+          COALESCE(SUM(amount_vnd), 0)::bigint AS total,
+          COUNT(*)::int                          AS cnt
+        FROM payment_records
+        WHERE status = $1 AND amount_vnd IS NOT NULL
+        GROUP BY provider
+      `, [PaymentStatus.SUCCESS]),
+    ]);
+
+    const t = totalsRows[0] ?? { today: '0', this_month: '0', this_year: '0', all_time: '0' };
+
+    const monthMap = new Map(monthlyRows.map((r) => [r.year_month, Number(r.total)]));
+    monthScaffold.forEach((m) => { m.total = monthMap.get(m.yearMonth) ?? 0; });
+
+    return {
+      today:       Number(t.today),
+      thisMonth:   Number(t.this_month),
+      thisYear:    Number(t.this_year),
+      allTime:     Number(t.all_time),
+      last6Months: monthScaffold.map(({ month, total }) => ({ month, total })),
+      byProvider:  providerRows.map((p) => ({
+        provider: p.provider,
+        total:    Number(p.total),
+        count:    Number(p.cnt),
+      })),
+    };
   }
 
   // ════════════════════════════════════════════════════════════════════════════

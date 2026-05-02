@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Genre } from './entities/genre.entity';
@@ -21,6 +21,7 @@ export class GenresService {
     @InjectRepository(Genre) private readonly genres: Repository<Genre>,
     @InjectRepository(GenreSuggestion) private readonly suggestions: Repository<GenreSuggestion>,
     @InjectQueue(QUEUE_NAMES.GENRE_BULK_TAGGING) private readonly bulkTaggingQueue: Queue,
+    private readonly dataSource: DataSource,
   ) {}
 
   // ── GET /genres ──────────────────────────────────────────────────────────
@@ -30,7 +31,37 @@ export class GenresService {
       where: { isActive: true },
       order: { name: 'ASC' },
     });
-    return genres.map((g) => ({ id: g.id, name: g.name, description: g.description }));
+
+    if (!genres.length) return [];
+
+    // Count songs per genre using PostgreSQL unnest on the simple-array column
+    const rows: Array<{ genre_id: string; cnt: string }> = await this.dataSource.query(`
+      SELECT unnest(string_to_array(genre_ids, ',')) AS genre_id, COUNT(*) AS cnt
+      FROM songs
+      WHERE genre_ids IS NOT NULL AND genre_ids <> ''
+      GROUP BY genre_id
+    `);
+
+    const countMap = new Map(rows.map((r) => [r.genre_id, parseInt(r.cnt, 10)]));
+
+    return genres.map((g) => ({
+      id:          g.id,
+      name:        g.name,
+      description: g.description,
+      songCount:   countMap.get(g.id) ?? 0,
+    }));
+  }
+
+  // ── POST /genres (ADMIN only) ─────────────────────────────────────────────
+
+  async createGenre(name: string, description?: string) {
+    const trimmed = name.trim();
+    const existing = await this.genres.findOne({ where: { name: trimmed } });
+    if (existing) throw new ConflictException(`Genre "${trimmed}" already exists`);
+
+    const genre = this.genres.create({ name: trimmed, description: description?.trim() ?? null });
+    const saved  = await this.genres.save(genre);
+    return { id: saved.id, name: saved.name, description: saved.description, songCount: 0 };
   }
 
   // ── POST /genres/suggest ─────────────────────────────────────────────────

@@ -257,4 +257,13 @@ export class AdminController {
   ) {
     return this.adminService.takedownReport(adminId, reportId, dto);
   }
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // Phase 9 — Revenue summary
+  // ════════════════════════════════════════════════════════════════════════════
+
+  @Get('revenue/summary')
+  getRevenueSummary() {
+    return this.adminService.getRevenueSummary();
+  }
 }
