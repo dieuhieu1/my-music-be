@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
 import { Role } from '@mymusic/types';
 import { getRoleHome } from '@/lib/utils/roleRedirect';
+import { getAssetUrl } from '@/lib/utils/asset';
 
 const NAV_LINKS = [
   { label: 'Explore', href: 'browse'   },
@@ -87,7 +88,7 @@ function UserMenu({ locale }: { locale: string }) {
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(13,13,13,0.05)'; }}
       >
         {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt={user.name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+          <img src={getAssetUrl(user.avatarUrl)} alt={user.name} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
         ) : (
           <div style={{
             width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
@@ -118,7 +119,7 @@ function UserMenu({ locale }: { locale: string }) {
         }}>
           <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.07)', display: 'flex', alignItems: 'center', gap: 10 }}>
             {user.avatarUrl ? (
-              <img src={user.avatarUrl} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              <img src={getAssetUrl(user.avatarUrl)} alt="" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
             ) : (
               <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'rgba(232,184,75,0.12)', border: '1px solid rgba(232,184,75,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--gold)', flexShrink: 0 }}>
                 {initials}

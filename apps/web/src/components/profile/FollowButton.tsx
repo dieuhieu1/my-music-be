@@ -90,8 +90,6 @@ export default function FollowButton({
     <button
       type="button"
       onClick={handleClick}
-      onMouseEnter={() => isFollowing && setIsHover(true)}
-      onMouseLeave={() => setIsHover(false)}
       disabled={isLoading}
       className={bounce ? 'follow-bounce' : ''}
       style={{
@@ -113,12 +111,16 @@ export default function FollowButton({
         opacity: isLoading ? 0.7 : 1,
         whiteSpace: 'nowrap',
       }}
-      onMouseEnterCapture={(e) => {
-        if (!isFollowing) {
-          (e.currentTarget as HTMLElement).style.boxShadow = '0 0 18px rgba(232,184,75,0.25)';
+       onMouseEnter={(e) => {
+        if (isFollowing) {
+          setIsHover(true);
+        } else {
+          (e.currentTarget as HTMLElement).style.boxShadow =
+            '0 0 18px rgba(232,184,75,0.25)';
         }
       }}
-      onMouseLeaveCapture={(e) => {
+      onMouseLeave={(e) => {
+        setIsHover(false);
         (e.currentTarget as HTMLElement).style.boxShadow = 'none';
       }}
     >

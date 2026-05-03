@@ -5,6 +5,7 @@ import { Music2, Play, Pause } from 'lucide-react';
 import { usePlayerStore, type PlayerSong } from '@/store/usePlayerStore';
 import type { Song } from '@/lib/api/songs.api';
 import { SongContextMenu } from '@/components/music/SongContextMenu';
+import { getAssetUrl } from '@/lib/utils/asset';
 
 interface Props {
   song: Song;
@@ -86,7 +87,7 @@ export function SongRow({ song, index, artistName, onPlay, onAddToQueue, onDownl
         position: 'relative',
       }}>
         {song.coverArtUrl
-          ? <img src={song.coverArtUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={getAssetUrl(song.coverArtUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Music2 size={14} color="rgba(232,184,75,0.3)" />
         }
         {/* Hover overlay on cover art */}

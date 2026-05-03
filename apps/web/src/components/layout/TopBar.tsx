@@ -12,6 +12,7 @@ import { authApi } from '@/lib/api/auth.api';
 import { Role } from '@mymusic/types';
 import { getRoleHome } from '@/lib/utils/roleRedirect';
 import NotificationBell from '@/components/layout/NotificationBell';
+import { getAssetUrl } from '@/lib/utils/asset';
 
 const NAV_LINKS = [
   { label: 'Explore', href: 'browse'   },
@@ -134,7 +135,7 @@ export default function TopBar() {
               >
                 {user.avatarUrl ? (
                   <img
-                    src={user.avatarUrl}
+                    src={getAssetUrl(user.avatarUrl)}
                     alt={user.name}
                     style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
                   />
@@ -179,7 +180,7 @@ export default function TopBar() {
                       {user.name}
                     </p>
                     <p style={{ fontSize: '0.68rem', color: 'var(--muted-text)' }}>
-                      {user.roles?.includes('PREMIUM') ? '✦ Premium' : 'Free Plan'}
+                      {user.roles?.includes(Role.PREMIUM) ? '✦ Premium' : 'Free Plan'}
                     </p>
                   </div>
 

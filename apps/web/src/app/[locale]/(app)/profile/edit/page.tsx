@@ -147,7 +147,7 @@ export default function EditProfilePage() {
             className={saved ? '' : 'btn-gold'}
             style={{
               flex: 1, padding: '13px 0',
-              borderRadius: 4, border: 'none',
+              borderRadius: 4,
               background: saved ? 'rgba(120,200,120,0.15)' : undefined,
               color: saved ? '#7ac880' : '#0d0d0d',
               fontSize: '0.85rem',
@@ -156,7 +156,7 @@ export default function EditProfilePage() {
               textTransform: 'uppercase',
               cursor: uploading ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              border: saved ? '1px solid rgba(120,200,120,0.3)' : undefined,
+              border: saved ? '1px solid rgba(120,200,120,0.3)' : 'none',
             }}
           >
             {uploading ? (

@@ -50,7 +50,7 @@ export default function AlbumDetailPage() {
       .map(t => ({
         id: t.songId,
         title: t.title ?? 'Untitled',
-        artistName: album?.artistName ?? '',
+        artistName: '',
         coverArtUrl: album?.coverArtUrl ?? null,
         fileUrl: '',
         durationSeconds: t.duration ?? 0,

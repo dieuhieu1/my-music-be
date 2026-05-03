@@ -465,8 +465,8 @@ export default function EditSongPage() {
         {/* Actions */}
         <div className="anim-fade-up anim-fade-up-7" style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button type="submit" disabled={saving || saved} className={saved ? '' : 'btn-gold'} style={{
-            flex: 1, minWidth: 140, padding: '13px 0', borderRadius: 6, border: 'none',
-            background: saved ? 'rgba(120,200,120,0.12)' : undefined,
+            flex: 1, minWidth: 140, padding: '13px 0', borderRadius: 6,
+            background: saved ? 'rgba(120,200,120,0.12)' : 'none',
             border: saved ? '1px solid rgba(120,200,120,0.25)' : undefined,
             color: saved ? '#7ac880' : '#0d0d0d', fontSize: '0.85rem', fontFamily: 'var(--font-body)',
             fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase',

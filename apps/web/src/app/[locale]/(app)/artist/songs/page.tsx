@@ -8,6 +8,8 @@ import { songsApi, type Song } from '@/lib/api/songs.api';
 import { SongStatus } from '@mymusic/types';
 import { usePlayer } from '@/hooks/usePlayer';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { getAssetUrl } from '@/lib/utils/asset';
+
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: string }) {
@@ -61,7 +63,7 @@ function SongRow({ song, locale, onDelete }: { song: Song; locale: string; onDel
   const handlePreview = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (isActive) { togglePlay(); return; }
-    playSong({ id: song.id, title: song.title, artistName: '', coverArtUrl: song.coverArtUrl, fileUrl: '', durationSeconds: song.duration ?? 0 });
+    playSong({ id: song.id, title: song.title, artistName: '', coverArtUrl: getAssetUrl(song.coverArtUrl), fileUrl: '', durationSeconds: song.duration ?? 0 });
   };
 
   const handleDelete = async (e: React.MouseEvent) => {
@@ -106,7 +108,7 @@ function SongRow({ song, locale, onDelete }: { song: Song; locale: string; onDel
         }}
       >
         {song.coverArtUrl
-          ? <img src={song.coverArtUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={getAssetUrl(song.coverArtUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : <Music2 size={18} color="rgba(232,184,75,0.3)" />
         }
         {hov && (

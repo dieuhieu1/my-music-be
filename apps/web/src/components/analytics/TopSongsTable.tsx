@@ -3,6 +3,8 @@
 import { Music2 } from 'lucide-react';
 import type { TopSong } from '@/lib/api/analytics.api';
 
+import { getAssetUrl } from '@/lib/utils/asset';
+
 interface TopSongsTableProps {
   songs: TopSong[];
   onSelectSong?: (songId: string) => void;
@@ -71,7 +73,7 @@ export function TopSongsTable({ songs, onSelectSong, selectedSongId }: TopSongsT
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               {song.coverArtUrl
-                ? <img src={song.coverArtUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ? <img src={getAssetUrl(song.coverArtUrl)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 : <Music2 size={14} color="rgba(232,184,75,0.2)" />
               }
             </div>

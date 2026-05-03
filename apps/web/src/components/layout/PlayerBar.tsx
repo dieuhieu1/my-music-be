@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { usePlayer } from '@/hooks/usePlayer';
+import { getAssetUrl } from '@/lib/utils/asset';
 
 // ── Animated wave bars ────────────────────────────────────────────────────────
 function WaveBar({ isPlaying }: { isPlaying: boolean }) {
@@ -181,7 +182,7 @@ export default function PlayerBar() {
         }}>
           {currentSong.coverArtUrl ? (
             <img
-              src={currentSong.coverArtUrl}
+              src={getAssetUrl(currentSong.coverArtUrl)}
               alt={currentSong.title}
               style={{
                 width: '100%', height: '100%', objectFit: 'cover',

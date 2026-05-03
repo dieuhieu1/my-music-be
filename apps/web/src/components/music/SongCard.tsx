@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Play, Plus, Music2 } from 'lucide-react';
 import { usePlayerStore, type PlayerSong } from '@/store/usePlayerStore';
 import type { Song } from '@/lib/api/songs.api';
+import { getAssetUrl } from '@/lib/utils/asset';
 
 interface Props {
   song: Song;
@@ -54,7 +55,7 @@ export function SongCard({ song, index, artistName, onPlay, onAddToQueue }: Prop
         }}>
           {song.coverArtUrl
             ? <img
-                src={song.coverArtUrl} alt={song.title}
+                src={getAssetUrl(song.coverArtUrl)} alt={song.title}
                 className={isActive && isPlaying ? 'vinyl-glow' : ''}
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />

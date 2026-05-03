@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Shield, LogOut, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { authApi } from '@/lib/api/auth.api';
+import { getAssetUrl } from '@/lib/utils/asset';
 
 export default function AdminTopBar() {
   const { locale }      = useParams<{ locale: string }>();
@@ -84,7 +85,7 @@ export default function AdminTopBar() {
           >
             {user.avatarUrl ? (
               <img
-                src={user.avatarUrl} alt={user.name}
+                src={getAssetUrl(user.avatarUrl)} alt={user.name}
                 style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
               />
             ) : (
