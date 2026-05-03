@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Search, Compass } from 'lucide-react';
 import { songsApi, type Song } from '@/lib/api/songs.api';
@@ -12,7 +12,7 @@ import type { PlayerSong } from '@/store/usePlayerStore';
 
 const PAGE_SIZE = 24;
 
-export default function BrowsePage() {
+function BrowseContent() {
   const { locale } = useParams<{ locale: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -290,5 +290,13 @@ export default function BrowsePage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function BrowsePage() {
+  return (
+    <Suspense fallback={null}>
+      <BrowseContent />
+    </Suspense>
   );
 }

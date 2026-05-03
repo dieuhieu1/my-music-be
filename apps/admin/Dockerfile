@@ -25,9 +25,20 @@ RUN npm run build
 
 # ── prod ──────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS prod
-WORKDIR /app/apps/admin
-COPY --from=build /app/apps/admin/.next/standalone ./
-COPY --from=build /app/apps/admin/.next/static ./.next/static
-EXPOSE 3002
+# Đổi WORKDIR về thư mục gốc
+WORKDIR /app
 ENV NODE_ENV=production
-CMD ["node", "server.js"]
+
+# Copy toàn bộ cấu trúc standalone
+COPY --from=build /app/apps/admin/.next/standalone ./
+
+# Copy file static vào đúng vị trí bên trong app
+COPY --from=build /app/apps/admin/.next/static ./apps/admin/.next/static
+
+# (Tùy chọn) Bỏ comment dòng dưới nếu admin bạn có thư mục public
+# COPY --from=build /app/apps/admin/public ./apps/admin/public
+
+EXPOSE 3002
+
+# Trỏ đúng đường dẫn tới file server.js
+CMD ["node", "apps/admin/server.js"]

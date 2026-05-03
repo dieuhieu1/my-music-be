@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Search, Music2, Disc3, Mic2 } from 'lucide-react';
 import apiClient from '@/lib/api/axios';
@@ -35,7 +35,7 @@ function EmptySection({ label }: { label: string }) {
   );
 }
 
-export default function SearchPage() {
+function SearchContent() {
   const { locale } = useParams<{ locale: string }>();
   const searchParams = useSearchParams();
   const { playWithContext } = usePlayer();
@@ -96,7 +96,7 @@ export default function SearchPage() {
   return (
     <div style={{ padding: '32px 32px 40px' }}>
 
-      {/* ── Header + search input ─────────────────────────────────────────── */}
+      {/* Header + search input */}
       <div className="anim-fade-up anim-fade-up-1" style={{ marginBottom: 32 }}>
         <p style={{
           fontSize: '0.62rem', letterSpacing: '0.13em', textTransform: 'uppercase',
@@ -146,7 +146,7 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* ── Empty prompt ─────────────────────────────────────────────────── */}
+      {/* Empty prompt */}
       {!query && (
         <div className="anim-fade-up anim-fade-up-2" style={{
           padding: '48px 32px', textAlign: 'center',
@@ -163,7 +163,7 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* ── No results ───────────────────────────────────────────────────── */}
+      {/* No results */}
       {query && !loading && results && !hasResults && (
         <div className="anim-fade-up anim-fade-up-2" style={{
           padding: '48px 32px', textAlign: 'center',
@@ -179,7 +179,7 @@ export default function SearchPage() {
         </div>
       )}
 
-      {/* ── Results ──────────────────────────────────────────────────────── */}
+      {/* Results */}
       {results && hasResults && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 36 }}>
 
@@ -306,5 +306,13 @@ export default function SearchPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={null}>
+      <SearchContent />
+    </Suspense>
   );
 }

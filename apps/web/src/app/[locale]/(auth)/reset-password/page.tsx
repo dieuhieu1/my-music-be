@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -23,7 +23,7 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const router = useRouter();
   const locale = useLocale();
   const params = useSearchParams();
@@ -88,10 +88,10 @@ export default function ResetPasswordPage() {
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <div className="anim-fade-up anim-fade-up-2">
-          <PasswordInput label="New password" autoComplete="new-password" error={errors.newPassword?.message} {...register('newPassword')} />
+          <PasswordInput label="New password" style={{ width: '100%' }} autoComplete="new-password" error={errors.newPassword?.message} {...register('newPassword')} />
         </div>
         <div className="anim-fade-up anim-fade-up-3">
-          <PasswordInput label="Confirm password" autoComplete="new-password" error={errors.confirm?.message} {...register('confirm')} />
+          <PasswordInput label="Confirm password" style={{ width: '100%' }} autoComplete="new-password" error={errors.confirm?.message} {...register('confirm')} />
         </div>
 
         {serverError && (
@@ -109,5 +109,13 @@ export default function ResetPasswordPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={null}>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

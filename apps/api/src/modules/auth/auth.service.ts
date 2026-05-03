@@ -25,6 +25,7 @@ import { VerificationCode } from './entities/verification-code.entity';
 import { Role, DeviceType } from '../../common/enums';
 import { QUEUE_NAMES } from '../queue/queue.constants';
 import { MailService } from '../mail/mail.service';
+import { StorageService } from '../storage/storage.service';
 
 import {
   RegisterDto,
@@ -60,6 +61,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly mail: MailService,
     private readonly dataSource: DataSource,
+    private readonly storage: StorageService,
     @InjectQueue(QUEUE_NAMES.EMAIL) private readonly emailQueue: Queue,
   ) {}
 
@@ -138,6 +140,12 @@ export class AuthService {
 
   private safeUser(user: User) {
     const { passwordHash, failedAttempts, lockUntil, ...safe } = user as any;
+    if (safe.avatarUrl) {
+      safe.avatarUrl = this.storage.getPublicUrl(
+        this.storage.getBuckets().images,
+        safe.avatarUrl,
+      );
+    }
     return safe;
   }
 

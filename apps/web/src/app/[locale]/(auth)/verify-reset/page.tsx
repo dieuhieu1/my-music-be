@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { authApi } from '@/lib/api/auth.api';
 import OtpInput from '@/components/auth/OtpInput';
 import AuthButton from '@/components/auth/AuthButton';
 
-export default function VerifyResetPage() {
+function VerifyResetContent() {
   const router = useRouter();
   const locale = useLocale();
   const params = useSearchParams();
@@ -65,5 +65,13 @@ export default function VerifyResetPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function VerifyResetPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyResetContent />
+    </Suspense>
   );
 }

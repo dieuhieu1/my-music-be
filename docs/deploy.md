@@ -8,11 +8,11 @@
 
 ## Subdomains
 
-| Service | URL |
-|---------|-----|
-| Web app | `https://dieuhieu24.me` |
-| API | `https://api.dieuhieu24.me/api/v1` |
-| Admin portal | `https://admin.dieuhieu24.me` |
+| Service      | URL                                |
+| ------------ | ---------------------------------- |
+| Web app      | `https://dieuhieu24.me`            |
+| API          | `https://api.dieuhieu24.me/api/v1` |
+| Admin portal | `https://admin.dieuhieu24.me`      |
 
 ---
 
@@ -33,17 +33,23 @@ EC2 t3.small — 30 GB EBS gp3  (IP thay đổi mỗi lần start, DNS tự upda
 ├── python dsp     (:5000)
 ├── postgresql     ← data lưu trên EBS (persist khi stop)
 └── redis          ← data lưu trên EBS (persist khi stop)
+
+S3 Buckets (AWS — dùng chung local + PROD):
+├── mymusic-audio       ← audio files (streaming)
+├── mymusic-audio-enc   ← encrypted .enc files (offline download)
+├── mymusic-images      ← cover art + avatars
+└── mymusic-backups     ← PostgreSQL backup (tách riêng)
 ```
 
 **Chi phí (không có Elastic IP):**
 
-| Trạng thái | Chi phí |
-|-----------|---------|
+| Trạng thái               | Chi phí                   |
+| ------------------------ | ------------------------- |
 | EC2 đang chạy (t3.small) | ~$0.023/giờ (~$0.55/ngày) |
-| EC2 đã stop | $0 |
-| EBS 30 GB gp3 | ~$2.40/tháng (luôn tính) |
-| **Idle hoàn toàn** | **~$2.40/tháng** |
-| **Chạy 8 giờ/ngày** | **~$6.50/tháng** |
+| EC2 đã stop              | $0                        |
+| EBS 30 GB gp3            | ~$2.40/tháng (luôn tính)  |
+| **Idle hoàn toàn**       | **~$2.40/tháng**          |
+| **Chạy 8 giờ/ngày**      | **~$6.50/tháng**          |
 
 ---
 
@@ -52,13 +58,15 @@ EC2 t3.small — 30 GB EBS gp3  (IP thay đổi mỗi lần start, DNS tự upda
 1. Lấy GoDaddy API Key
 2. Tạo EC2 (không cần Elastic IP)
 3. Trỏ DNS GoDaddy lần đầu (thủ công 1 lần)
-4. Tạo ECR repositories
+4. Tạo ECR repositories + S3 backup bucket
 5. Build & push Docker images
 6. Cài Docker trên EC2
 7. Upload config files lên EC2
 8. Bật systemd auto-start + auto DNS update
-9. Lấy SSL certificate (Let's Encrypt)
-10. Test toàn bộ URLs
+9. **Start Docker Compose — để TypeORM tạo schema**
+10. **Export DB từ local + import lên PROD**
+11. Lấy SSL certificate (Let's Encrypt)
+12. Test toàn bộ URLs
 
 ---
 
@@ -85,17 +93,52 @@ Key pair:      Tạo mới → download file .pem → giữ cẩn thận
 Storage:       30 GB gp3  (Delete on termination: YES — mặc định)
 ```
 
-**IAM Role** — tạo role mới với 2 policy:
+**IAM Role** — tạo role mới với các policy:
+
 - `AmazonEC2ContainerRegistryReadOnly`
-- `AmazonS3FullAccess` (hoặc custom policy cho 3 buckets)
+- Custom inline policy cho S3 (4 buckets):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:HeadBucket",
+        "s3:HeadObject"
+      ],
+      "Resource": [
+        "arn:aws:s3:::mymusic-audio/*",
+        "arn:aws:s3:::mymusic-audio-enc/*",
+        "arn:aws:s3:::mymusic-images/*",
+        "arn:aws:s3:::mymusic-backups/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": "s3:ListBucket",
+      "Resource": [
+        "arn:aws:s3:::mymusic-audio",
+        "arn:aws:s3:::mymusic-audio-enc",
+        "arn:aws:s3:::mymusic-images",
+        "arn:aws:s3:::mymusic-backups"
+      ]
+    }
+  ]
+}
+```
 
 **Security Group:**
 
-| Type | Port | Source |
-|------|------|--------|
-| SSH | 22 | My IP |
-| HTTP | 80 | 0.0.0.0/0 |
-| HTTPS | 443 | 0.0.0.0/0 |
+| Type  | Port | Source    |
+| ----- | ---- | --------- |
+| SSH   | 22   | My IP     |
+| HTTP  | 80   | 0.0.0.0/0 |
+| HTTPS | 443  | 0.0.0.0/0 |
 
 > Sau khi tạo, ghi lại **Instance ID** (dạng `i-xxxxxxxxxxxxxxxxx`).  
 > Không cần Elastic IP.
@@ -110,25 +153,35 @@ Lấy Public IP của EC2 lần đầu từ AWS Console → EC2 → instance →
 
 Xóa các A record mặc định (nếu có), thêm:
 
-| Type | Name | Value | TTL |
-|------|------|-------|-----|
-| A | `@` | `<EC2_PUBLIC_IP>` | 600 |
-| A | `www` | `<EC2_PUBLIC_IP>` | 600 |
-| A | `api` | `<EC2_PUBLIC_IP>` | 600 |
-| A | `admin` | `<EC2_PUBLIC_IP>` | 600 |
+| Type | Name    | Value             | TTL |
+| ---- | ------- | ----------------- | --- |
+| A    | `@`     | `<EC2_PUBLIC_IP>` | 600 |
+| A    | `www`   | `<EC2_PUBLIC_IP>` | 600 |
+| A    | `api`   | `<EC2_PUBLIC_IP>` | 600 |
+| A    | `admin` | `<EC2_PUBLIC_IP>` | 600 |
 
 > Chỉ làm bước này **1 lần duy nhất**. Từ lần 2 trở đi, script tự cập nhật.  
 > DNS lan truyền mất 5–30 phút. Kiểm tra: `nslookup dieuhieu24.me`
 
 ---
 
-## Bước 4 — Tạo ECR Repositories
+## Bước 4 — Tạo ECR Repositories + S3 Backup Bucket
 
 ```bash
-aws ecr create-repository --repository-name mymusic/api   --region ap-southeast-1
-aws ecr create-repository --repository-name mymusic/web   --region ap-southeast-1
-aws ecr create-repository --repository-name mymusic/admin --region ap-southeast-1
-aws ecr create-repository --repository-name mymusic/dsp   --region ap-southeast-1
+# ECR repositories (chạy từ máy local)
+aws ecr create-repository --repository-name mymusic/api   --region us-east-1
+aws ecr create-repository --repository-name mymusic/web   --region us-east-1
+aws ecr create-repository --repository-name mymusic/admin --region us-east-1
+aws ecr create-repository --repository-name mymusic/dsp   --region us-east-1
+
+# S3 backup bucket (tách riêng khỏi app buckets)
+aws s3 mb s3://mymusic-backups --region us-east-1
+
+# Tắt public access cho backup bucket
+aws s3api put-public-access-block \
+  --bucket mymusic-backups \
+  --public-access-block-configuration \
+  "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
 ```
 
 ---
@@ -137,11 +190,11 @@ aws ecr create-repository --repository-name mymusic/dsp   --region ap-southeast-
 
 ```bash
 # Login ECR (chạy từ máy local)
-aws ecr get-login-password --region ap-southeast-1 | \
+aws ecr get-login-password --region us-east-1 | \
   docker login --username AWS --password-stdin \
-  <ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com
+  <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
 
-ECR_BASE="<ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com"
+ECR_BASE="<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com"
 
 # Build từ root monorepo
 docker build -f apps/api/Dockerfile   --target prod -t $ECR_BASE/mymusic/api:latest .
@@ -249,7 +302,7 @@ services:
       - mymusic-net
 
   api:
-    image: <ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/mymusic/api:latest
+    image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mymusic/api:latest
     restart: unless-stopped
     env_file: .env.prod
     environment:
@@ -266,21 +319,21 @@ services:
       - mymusic-net
 
   web:
-    image: <ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/mymusic/web:latest
+    image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mymusic/web:latest
     restart: unless-stopped
     env_file: .env.prod
     networks:
       - mymusic-net
 
   admin:
-    image: <ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/mymusic/admin:latest
+    image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mymusic/admin:latest
     restart: unless-stopped
     env_file: .env.prod
     networks:
       - mymusic-net
 
   dsp:
-    image: <ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/mymusic/dsp:latest
+    image: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/mymusic/dsp:latest
     restart: unless-stopped
     networks:
       - mymusic-net
@@ -313,7 +366,7 @@ JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=30d
 
 # AWS S3 — EC2 dùng IAM Role, không cần hardcode key
-AWS_REGION=ap-southeast-1
+AWS_REGION=us-east-1
 AWS_S3_BUCKET_AUDIO=mymusic-audio
 AWS_S3_BUCKET_AUDIO_ENC=mymusic-audio-enc
 AWS_S3_BUCKET_IMAGES=mymusic-images
@@ -329,6 +382,8 @@ DSP_URL=http://dsp:5000
 
 # Payment
 VNPAY_HASH_SECRET=
+VNPAY_RETURN_URL=https://dieuhieu24.me/vi/payment/vnpay
+VNPAY_IPN_URL=https://api.dieuhieu24.me/api/v1/payment/vn-pay/ipn
 MOMO_SECRET_KEY=
 
 # AI (Phase 10)
@@ -339,7 +394,52 @@ NEXT_PUBLIC_API_URL=https://api.dieuhieu24.me/api/v1
 NEXT_PUBLIC_ADMIN_URL=https://admin.dieuhieu24.me
 ```
 
-### 7c. `nginx.conf`
+### 7c. `nginx.conf` (HTTP only — dùng trước khi có SSL)
+
+```nginx
+events { worker_connections 1024; }
+
+http {
+  client_max_body_size 500M;
+
+  upstream api   { server api:3001; }
+  upstream web   { server web:3000; }
+  upstream admin { server admin:3002; }
+
+  server {
+    listen 80;
+    server_name dieuhieu24.me www.dieuhieu24.me;
+    location / {
+      proxy_pass http://web;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+    }
+  }
+
+  server {
+    listen 80;
+    server_name api.dieuhieu24.me;
+    location / {
+      proxy_pass http://api;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_read_timeout 300s;
+    }
+  }
+
+  server {
+    listen 80;
+    server_name admin.dieuhieu24.me;
+    location / {
+      proxy_pass http://admin;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+    }
+  }
+}
+```
+
+### 7d. `nginx.conf` (HTTPS — dùng sau khi có SSL)
 
 ```nginx
 events { worker_connections 1024; }
@@ -368,6 +468,7 @@ http {
       proxy_pass http://web;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-Proto https;
     }
   }
 
@@ -381,6 +482,7 @@ http {
       proxy_pass http://api;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-Proto https;
       proxy_read_timeout 300s;
     }
   }
@@ -395,53 +497,17 @@ http {
       proxy_pass http://admin;
       proxy_set_header Host $host;
       proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-Proto https;
     }
   }
 }
 ```
 
-### nginx.conf tạm thời (HTTP only — dùng trước khi có SSL)
-
-```nginx
-events { worker_connections 1024; }
-
-http {
-  client_max_body_size 500M;
-
-  upstream api   { server api:3001; }
-  upstream web   { server web:3000; }
-  upstream admin { server admin:3002; }
-
-  server {
-    listen 80;
-    server_name dieuhieu24.me www.dieuhieu24.me;
-    location / { proxy_pass http://web; proxy_set_header Host $host; }
-  }
-
-  server {
-    listen 80;
-    server_name api.dieuhieu24.me;
-    location / {
-      proxy_pass http://api;
-      proxy_set_header Host $host;
-      proxy_read_timeout 300s;
-    }
-  }
-
-  server {
-    listen 80;
-    server_name admin.dieuhieu24.me;
-    location / { proxy_pass http://admin; proxy_set_header Host $host; }
-  }
-}
-```
-
-### 7d. `update-dns.sh` — chạy tự động sau mỗi lần EC2 boot
+### 7e. `update-dns.sh` — chạy tự động sau mỗi lần EC2 boot
 
 ```bash
 #!/bin/bash
 # /home/ec2-user/mymusic/update-dns.sh
-# Tự động cập nhật GoDaddy DNS sau khi EC2 start
 
 DOMAIN="dieuhieu24.me"
 GD_API_KEY="YOUR_GODADDY_API_KEY"
@@ -458,6 +524,7 @@ for SUBDOMAIN in "@" "www" "api" "admin"; do
     -H "Authorization: sso-key $GD_API_KEY:$GD_API_SECRET" \
     -H "Content-Type: application/json" \
     -d "[{\"data\": \"$NEW_IP\", \"ttl\": 600}]"
+  echo "[DNS] Updated $SUBDOMAIN → $NEW_IP"
 done
 
 echo "[DNS] Done. New IP: $NEW_IP"
@@ -485,7 +552,7 @@ Requires=docker.service
 Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/home/ec2-user/mymusic
-ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region ap-southeast-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com'
+ExecStartPre=/bin/bash -c 'aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com'
 ExecStart=/usr/local/bin/docker-compose -f docker-compose.prod.yml up -d
 ExecStartPost=/bin/bash /home/ec2-user/mymusic/update-dns.sh
 ExecStop=/usr/local/bin/docker-compose -f docker-compose.prod.yml down
@@ -509,7 +576,125 @@ docker-compose -f docker-compose.prod.yml ps
 
 ---
 
-## Bước 9 — SSL Certificate (Let's Encrypt — miễn phí)
+## Bước 9 — Export DB từ local + Import lên PROD
+
+> ⚠️ Bước này chỉ làm **1 lần duy nhất** khi deploy lần đầu.  
+> Mục đích: copy toàn bộ data (artists, songs, users, genres...) từ local lên PROD.  
+> S3 files (audio, images) **không cần migrate** vì local và PROD dùng cùng AWS S3 buckets.
+
+### 9a. Trên máy local — Export data-only SQL
+
+```bash
+# Tìm tên container postgres đang chạy
+docker ps | grep postgres
+
+# Export DATA ONLY (không có CREATE TABLE — để TypeORM tự tạo schema)
+docker exec mymusic-postgres \
+  pg_dump \
+  --username mymusic \
+  --dbname mymusic_db \
+  --no-owner \
+  --no-acl \
+  --data-only \
+  --disable-triggers \
+  --format=plain \
+  > mymusic_data_$(date +%Y%m%d).sql
+
+# Kiểm tra file có data không (phải > 0 dòng)
+wc -l mymusic_data_$(date +%Y%m%d).sql
+head -30 mymusic_data_$(date +%Y%m%d).sql
+```
+
+> **Tại sao `--data-only`?**  
+> TypeORM `synchronize: true` đã tạo toàn bộ schema (tables, indexes, constraints) khi API start.  
+> Nếu import cả schema lẫn data sẽ bị lỗi "table already exists".
+
+### 9b. Trên máy local — Upload SQL lên S3 backup
+
+```bash
+DATE=$(date +%Y%m%d)
+
+aws s3 cp mymusic_data_${DATE}.sql \
+  s3://mymusic-backups/migration/initial_${DATE}.sql
+
+echo "✅ Upload xong: s3://mymusic-backups/migration/initial_${DATE}.sql"
+```
+
+### 9c. Trên EC2 — Đảm bảo schema đã được tạo
+
+```bash
+ssh -i your-key.pem ec2-user@<EC2_PUBLIC_IP>
+cd /home/ec2-user/mymusic
+
+# Kiểm tra API đang chạy và healthy
+docker-compose -f docker-compose.prod.yml ps
+
+# Verify schema đã tồn tại (TypeORM đã tạo tables)
+docker exec \
+  $(docker-compose -f docker-compose.prod.yml ps -q postgres) \
+  psql --username mymusic --dbname mymusic_db \
+  -c "\dt" | head -30
+
+# Phải thấy danh sách tables (users, songs, artist_profile, genres, ...)
+# Nếu chưa thấy → chờ API start hoàn toàn rồi chạy lại
+```
+
+### 9d. Trên EC2 — Stop API, import data, restart
+
+```bash
+# Bước 1: Stop API container (giữ postgres chạy)
+docker-compose -f docker-compose.prod.yml stop api web admin
+
+# Bước 2: Download SQL từ S3
+DATE=20260503  # thay bằng ngày thực tế, ví dụ: 20260428
+aws s3 cp \
+  s3://mymusic-backups/migration/initial_${DATE}.sql \
+  ./initial.sql
+
+# Kiểm tra file download đúng
+wc -l initial.sql  # phải > 100 dòng
+
+# Bước 3: Import data vào PostgreSQL
+docker exec -i \
+  $(docker-compose -f docker-compose.prod.yml ps -q postgres) \
+  psql \
+  --username mymusic \
+  --dbname mymusic_db \
+  < initial.sql
+
+# Nếu thấy lỗi "duplicate key" → data đã tồn tại, bỏ qua
+# Nếu thấy lỗi "relation does not exist" → schema chưa tạo, quay lại 9c
+
+# Bước 4: Verify data đã vào
+PSQL_CMD="docker exec $(docker-compose -f docker-compose.prod.yml ps -q postgres) psql --username mymusic --dbname mymusic_db"
+
+$PSQL_CMD -c "SELECT COUNT(*) AS users        FROM users;"
+$PSQL_CMD -c "SELECT COUNT(*) AS songs        FROM songs;"
+$PSQL_CMD -c "SELECT COUNT(*) AS artists      FROM artist_profile;"
+$PSQL_CMD -c "SELECT COUNT(*) AS genres       FROM genre;"
+$PSQL_CMD -c "SELECT COUNT(*) AS playlists    FROM playlist;"
+
+# So sánh số với local — phải khớp
+
+# Bước 5: Start lại toàn bộ services
+docker-compose -f docker-compose.prod.yml start api web admin
+
+# Bước 6: Verify API healthy
+sleep 10
+curl http://localhost:3001/api/v1/health
+```
+
+### 9e. Xóa file SQL tạm trên EC2
+
+```bash
+# Xóa file SQL khỏi EC2 sau khi import xong (đã có backup trên S3)
+rm /home/ec2-user/mymusic/initial.sql
+echo "✅ Migration hoàn thành. File SQL đã xóa khỏi EC2."
+```
+
+---
+
+## Bước 10 — SSL Certificate (Let's Encrypt — miễn phí)
 
 DNS phải đã trỏ đúng vào EC2 trước khi chạy certbot.
 
@@ -528,6 +713,9 @@ sudo certbot certonly --standalone \
   --email dieuhieu10h@gmail.com \
   --agree-tos --non-interactive
 
+# Thay nginx.conf bằng bản HTTPS (mục 7d)
+cp nginx-https.conf /home/ec2-user/mymusic/nginx.conf
+
 # Bật lại nginx
 docker-compose -f docker-compose.prod.yml start nginx
 
@@ -538,7 +726,34 @@ echo "0 3 1 * * root certbot renew --quiet && docker-compose -f /home/ec2-user/m
 
 ---
 
-## Bước 10 — Scripts Stop/Start (chạy từ máy local)
+## Bước 11 — Test toàn bộ URLs
+
+```bash
+# Health check
+curl https://api.dieuhieu24.me/api/v1/health
+
+# Web app
+curl -I https://dieuhieu24.me
+
+# Admin portal
+curl -I https://admin.dieuhieu24.me
+
+# Test login (thay email/password)
+curl -X POST https://api.dieuhieu24.me/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@test.com","password":"yourpassword"}' \
+  | jq '.data.user.roles'
+# Expected: ["ADMIN"]
+
+# Test genres (data từ local phải có)
+curl https://api.dieuhieu24.me/api/v1/genres \
+  | jq '.data | length'
+# Expected: 30 (số genres đã seed)
+```
+
+---
+
+## Bước 12 — Scripts Stop/Start (chạy từ máy local)
 
 Tạo `scripts/demo-start.sh`:
 
@@ -547,7 +762,7 @@ Tạo `scripts/demo-start.sh`:
 set -e
 
 INSTANCE_ID="i-xxxxxxxxxxxxxxxxx"   # thay bằng Instance ID thực
-REGION="ap-southeast-1"
+REGION="us-east-1"
 
 echo "[1/3] Starting EC2..."
 aws ec2 start-instances --instance-ids $INSTANCE_ID --region $REGION > /dev/null
@@ -560,7 +775,7 @@ echo "      Docker Compose + DNS update đang chạy tự động trên EC2..."
 echo "      App sẵn sàng sau ~3-4 phút."
 echo ""
 echo "  Web:   https://dieuhieu24.me"
-echo "  API:   https://api.dieuhieu24.me/api/v1"
+echo "  API:   https://api.dieuhieu24.me/api/v1/health"
 echo "  Admin: https://admin.dieuhieu24.me"
 ```
 
@@ -569,11 +784,11 @@ Tạo `scripts/demo-stop.sh`:
 ```bash
 #!/bin/bash
 INSTANCE_ID="i-xxxxxxxxxxxxxxxxx"
-REGION="ap-southeast-1"
+REGION="us-east-1"
 
 echo "Stopping EC2..."
 aws ec2 stop-instances --instance-ids $INSTANCE_ID --region $REGION > /dev/null
-echo "Done. Data preserved on EBS. Cost: ~$0.08/day (EBS only)."
+echo "Done. Data preserved on EBS. Cost: ~$2.40/month (EBS only)."
 ```
 
 ```bash
@@ -582,10 +797,10 @@ chmod +x scripts/demo-start.sh scripts/demo-stop.sh
 
 ---
 
-## Bước 11 — Database Backup
+## Bước 13 — Database Backup định kỳ
 
 ```bash
-# SSH vào EC2 (lấy IP hiện tại từ AWS Console hoặc script bên dưới)
+# SSH vào EC2
 INSTANCE_ID="i-xxxxxxxxxxxxxxxxx"
 IP=$(aws ec2 describe-instances \
   --instance-ids $INSTANCE_ID \
@@ -593,95 +808,37 @@ IP=$(aws ec2 describe-instances \
   --output text)
 ssh -i your-key.pem ec2-user@$IP
 
-# Backup lên S3 (an toàn nhất)
-docker exec mymusic-postgres pg_dump -U mymusic mymusic_db | \
-  aws s3 cp - s3://mymusic-images/backups/db_$(date +%Y%m%d_%H%M).sql
+# Backup lên S3 backup bucket (tách riêng khỏi app buckets)
+docker exec \
+  $(docker-compose -f docker-compose.prod.yml ps -q postgres) \
+  pg_dump -U mymusic mymusic_db | \
+  aws s3 cp - s3://mymusic-backups/scheduled/db_$(date +%Y%m%d_%H%M).sql
 
-# Backup local
-docker exec mymusic-postgres pg_dump -U mymusic mymusic_db \
+echo "✅ Backup saved to s3://mymusic-backups/scheduled/"
+
+# Backup local (giữ 7 ngày gần nhất)
+docker exec \
+  $(docker-compose -f docker-compose.prod.yml ps -q postgres) \
+  pg_dump -U mymusic mymusic_db \
   > /home/ec2-user/mymusic/backups/backup_$(date +%Y%m%d_%H%M).sql
 
-# Restore
-docker exec -i mymusic-postgres psql -U mymusic mymusic_db \
-  < /home/ec2-user/mymusic/backups/backup_YYYYMMDD_HHMM.sql
+# Xóa backup local cũ hơn 7 ngày
+find /home/ec2-user/mymusic/backups/ \
+  -name "backup_*.sql" -mtime +7 -delete
+
+# Restore (khi cần)
+# docker exec -i \
+#   $(docker-compose -f docker-compose.prod.yml ps -q postgres) \
+#   psql -U mymusic mymusic_db \
+#   < /home/ec2-user/mymusic/backups/backup_YYYYMMDD_HHMM.sql
 ```
 
----
+### Cron backup tự động hàng ngày lúc 2 AM
 
-## Bước 12 — GitHub Actions CI/CD
-
-Tạo `.github/workflows/deploy.yml`:
-
-```yaml
-name: Deploy to AWS
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-southeast-1
-
-      - name: Login to ECR
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build & Push images
-        run: |
-          ECR="${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com"
-          docker build -f apps/api/Dockerfile   --target prod -t $ECR/mymusic/api:latest .
-          docker build -f apps/web/Dockerfile   --target prod -t $ECR/mymusic/web:latest .
-          docker build -f apps/admin/Dockerfile --target prod -t $ECR/mymusic/admin:latest .
-          docker build -f apps/dsp/Dockerfile               -t $ECR/mymusic/dsp:latest apps/dsp/
-          docker push $ECR/mymusic/api:latest
-          docker push $ECR/mymusic/web:latest
-          docker push $ECR/mymusic/admin:latest
-          docker push $ECR/mymusic/dsp:latest
-
-      - name: Get EC2 current IP
-        run: |
-          EC2_IP=$(aws ec2 describe-instances \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
-            --query 'Reservations[0].Instances[0].PublicIpAddress' \
-            --output text)
-          echo "EC2_HOST=$EC2_IP" >> $GITHUB_ENV
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ env.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd /home/ec2-user/mymusic
-            aws ecr get-login-password --region ap-southeast-1 | \
-              docker login --username AWS --password-stdin \
-              ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-southeast-1.amazonaws.com
-            docker-compose -f docker-compose.prod.yml pull
-            docker-compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker image prune -f
+```bash
+echo "0 2 * * * ec2-user docker exec \$(docker-compose -f /home/ec2-user/mymusic/docker-compose.prod.yml ps -q postgres) pg_dump -U mymusic mymusic_db | aws s3 cp - s3://mymusic-backups/scheduled/db_\$(date +\%Y\%m\%d_\%H\%M).sql" | \
+  sudo tee /etc/cron.d/mymusic-backup
 ```
-
-**GitHub Secrets cần thêm:**
-
-| Secret | Giá trị |
-|--------|---------|
-| `AWS_ACCESS_KEY_ID` | IAM user key |
-| `AWS_SECRET_ACCESS_KEY` | IAM user secret |
-| `AWS_ACCOUNT_ID` | 12 số account ID |
-| `EC2_INSTANCE_ID` | `i-xxxxxxxxxxxxxxxxx` (không đổi) |
-| `EC2_SSH_KEY` | Nội dung file .pem |
-
-> Không cần lưu IP vào secrets vì script tự lấy IP mới qua Instance ID.
 
 ---
 
@@ -693,6 +850,7 @@ jobs:
 ```
 
 Trong AWS Console:
+
 - Nút **Stop** → an toàn
 - Nút **Terminate** → mất data
 
@@ -706,7 +864,7 @@ Trước demo:
   → EC2 boot (~1 phút)
   → Docker Compose tự lên (~3 phút)
   → update-dns.sh tự cập nhật GoDaddy DNS
-  → Mở https://dieuhieu24.me (chờ thêm ~5 phút nếu DNS chưa propagate)
+  → Mở https://dieuhieu24.me (chờ ~5 phút)
 
 Sau demo:
   ./scripts/demo-stop.sh
@@ -718,24 +876,49 @@ Sau demo:
 
 ## Checklist Deploy Lần Đầu
 
+### Chuẩn bị (máy local)
+
 - [ ] Lấy GoDaddy API Key + Secret từ developer.godaddy.com
 - [ ] Tạo EC2 t3.small, 30 GB EBS, IAM Role (không cần Elastic IP)
 - [ ] Ghi lại Instance ID
 - [ ] Trỏ DNS GoDaddy thủ công lần đầu (4 A records → EC2 Public IP)
 - [ ] Tạo 4 ECR repositories
+- [ ] Tạo S3 bucket `mymusic-backups` (tách riêng)
 - [ ] Build & push 4 Docker images (production target)
+
+### Setup EC2
+
 - [ ] SSH vào EC2, cài Docker + Docker Compose
-- [ ] Tạo thư mục `/home/ec2-user/mymusic/`
-- [ ] Upload `docker-compose.prod.yml`, `.env.prod`, `nginx.conf` (HTTP-only trước)
-- [ ] Upload `update-dns.sh`, điền API Key vào trong file, `chmod +x`
-- [ ] Cấu hình systemd service (có `ExecStartPost=update-dns.sh`)
+- [ ] Tạo thư mục `/home/ec2-user/mymusic/backups/`
+- [ ] Upload `docker-compose.prod.yml`
+- [ ] Upload `.env.prod` (điền đầy đủ secrets)
+- [ ] Upload `nginx.conf` (bản HTTP-only trước)
+- [ ] Upload `update-dns.sh`, điền API Key, `chmod +x`
+- [ ] Cấu hình systemd service
 - [ ] Chạy `docker-compose -f docker-compose.prod.yml up -d`
 - [ ] Kiểm tra containers: `docker-compose -f docker-compose.prod.yml ps`
-- [ ] Test: `curl http://api.dieuhieu24.me/api/v1/health`
+- [ ] Test: `curl http://localhost:3001/api/v1/health`
+
+### Migrate data từ local
+
+- [ ] **Local:** Export data-only SQL (`--data-only --disable-triggers`)
+- [ ] **Local:** Upload SQL lên `s3://mymusic-backups/migration/`
+- [ ] **EC2:** Verify schema đã tạo (`\dt` trong psql)
+- [ ] **EC2:** Stop api, web, admin containers
+- [ ] **EC2:** Download SQL từ S3
+- [ ] **EC2:** Import SQL vào postgres
+- [ ] **EC2:** Verify counts khớp với local
+- [ ] **EC2:** Start lại api, web, admin
+- [ ] **EC2:** Xóa file SQL tạm
+
+### SSL + Final test
+
 - [ ] Lấy SSL certificate (certbot)
 - [ ] Thay `nginx.conf` bằng bản HTTPS, restart nginx
 - [ ] Test HTTPS: `https://dieuhieu24.me`
+- [ ] Test admin: `https://admin.dieuhieu24.me`
+- [ ] Test API login với admin account
 - [ ] Stop EC2 → Start lại → kiểm tra DNS tự cập nhật
 - [ ] Backup DB lần đầu lên S3
+- [ ] Setup cron backup tự động
 - [ ] Setup `scripts/demo-start.sh` và `demo-stop.sh` trên máy local
-- [ ] Setup GitHub Actions (tùy chọn)

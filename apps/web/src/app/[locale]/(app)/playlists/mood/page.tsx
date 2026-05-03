@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { Crown, RotateCcw } from 'lucide-react';
@@ -31,7 +31,7 @@ const MOOD_SUBS: Record<MoodType, string> = {
   WORKOUT: 'EDM, hip-hop, and rock to fuel your session',
 };
 
-export default function MoodPlaylistPage() {
+function MoodPlaylistContent() {
   const searchParams = useSearchParams();
   const locale = useLocale();
   const initialMood = (searchParams.get('mood')?.toUpperCase() as MoodType | null) ?? undefined;
@@ -224,5 +224,13 @@ export default function MoodPlaylistPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function MoodPlaylistPage() {
+  return (
+    <Suspense fallback={null}>
+      <MoodPlaylistContent />
+    </Suspense>
   );
 }

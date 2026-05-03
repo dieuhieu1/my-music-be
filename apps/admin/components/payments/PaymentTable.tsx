@@ -144,16 +144,15 @@ function ManualGrantsTab() {
             <Tr>
               <Th>User</Th>
               <Th>Expires</Th>
-              <Th>Notes</Th>
               <Th>Granted</Th>
               <Th>Actions</Th>
             </Tr>
           </Thead>
           <Tbody>
             {isLoading ? (
-              <EmptyRow cols={5} message="Loading…" />
+              <EmptyRow cols={4} message="Loading…" />
             ) : data?.items.length === 0 ? (
-              <EmptyRow cols={5} message="No manual grants." />
+              <EmptyRow cols={4} message="No manual grants." />
             ) : (
               data?.items.map((p) => (
                 <Tr key={p.id}>
@@ -161,7 +160,6 @@ function ManualGrantsTab() {
                   <Td className="text-[#9CA3AF] text-xs">
                     {p.expiresAt ? format(new Date(p.expiresAt), 'MMM d, yyyy') : '—'}
                   </Td>
-                  <Td className="text-[#6B7280] max-w-[200px] truncate">{p.notes ?? '—'}</Td>
                   <Td className="text-[#9CA3AF] text-xs">
                     {format(new Date(p.createdAt), 'MMM d, yyyy')}
                   </Td>

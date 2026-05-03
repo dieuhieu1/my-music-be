@@ -25,10 +25,20 @@ RUN npm run build
 
 # ── prod ──────────────────────────────────────────────────────────────────
 FROM node:20-alpine AS prod
-WORKDIR /app/apps/web
-COPY --from=build /app/apps/web/.next/standalone ./
-COPY --from=build /app/apps/web/.next/static ./.next/static
-COPY --from=build /app/apps/web/public ./public
-EXPOSE 3000
+# Đổi WORKDIR về thư mục gốc
+WORKDIR /app
 ENV NODE_ENV=production
-CMD ["node", "server.js"]
+
+# Copy toàn bộ cấu trúc standalone (sẽ tự động bung ra apps/web/server.js)
+COPY --from=build /app/apps/web/.next/standalone ./
+
+# Copy file static vào đúng vị trí bên trong app
+COPY --from=build /app/apps/web/.next/static ./apps/web/.next/static
+
+# (Tùy chọn) Bỏ comment dòng dưới nếu web bạn có thư mục public (chứa logo, favicon, hình ảnh tĩnh...)
+# COPY --from=build /app/apps/web/public ./apps/web/public
+
+EXPOSE 3000
+
+# Trỏ đúng đường dẫn tới file server.js
+CMD ["node", "apps/web/server.js"]

@@ -189,7 +189,7 @@ export function UserTable() {
               <Th>Roles</Th>
               <Th>Premium</Th>
               <Th>Joined</Th>
-              <Th></Th>
+              {/* <Th></Th> */}
             </Tr>
           </Thead>
           <Tbody>

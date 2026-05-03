@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { authApi } from '@/lib/api/auth.api';
@@ -9,7 +9,7 @@ import { CheckCircle } from 'lucide-react';
 
 const RESEND_COOLDOWN = 60;
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const router = useRouter();
   const locale = useLocale();
   const params = useSearchParams();
@@ -264,5 +264,13 @@ export default function VerifyEmailPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyEmailContent />
+    </Suspense>
   );
 }

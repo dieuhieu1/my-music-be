@@ -4,6 +4,7 @@ import { DataSource, Repository } from 'typeorm';
 
 import { Song } from '../songs/entities/song.entity';
 import { ArtistProfile } from '../auth/entities/artist-profile.entity';
+import { StorageService } from '../storage/storage.service';
 import { Role, SongStatus } from '../../common/enums';
 
 export interface DailyPlay {
@@ -25,6 +26,7 @@ export class AnalyticsService {
     @InjectRepository(Song) private readonly songs: Repository<Song>,
     @InjectRepository(ArtistProfile) private readonly artistProfiles: Repository<ArtistProfile>,
     private readonly dataSource: DataSource,
+    private readonly storage: StorageService,
   ) {}
 
   // ── GET /artist/analytics/overview (BL-51) ───────────────────────────────────
@@ -90,7 +92,9 @@ export class AnalyticsService {
     const topSongs: TopSong[] = topSongsRaw.map((row) => ({
       songId:      row.id,
       title:       row.title,
-      coverArtUrl: row.cover_art_url,
+      coverArtUrl: row.cover_art_url 
+        ? this.storage.getPublicUrl(this.storage.getBuckets().images, row.cover_art_url)
+        : null,
       plays:       Number(row.plays),
       likes:       Number(row.likes),
     }));
